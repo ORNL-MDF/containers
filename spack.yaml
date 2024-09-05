@@ -1,0 +1,11 @@
+spack:
+  specs:
+  - cmake
+  - vim
+  - emacs
+  - wget
+  # Placeholder for Myna and other dev python packages
+  - py-numpy
+  # Myna apps (can eventually be replaced with "myna +exaca +additivefoam")
+  - exaca@master
+  - additivefoam@main
