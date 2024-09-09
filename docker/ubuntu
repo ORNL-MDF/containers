@@ -1,7 +1,6 @@
 # Build stage with Spack pre-installed and ready to be used
 FROM spack/ubuntu-jammy:develop AS builder
 
-
 # What we want to install and how we want to install it
 # is specified in a manifest file (spack.yaml)
 RUN mkdir -p /opt/spack-environment && \
@@ -12,7 +11,15 @@ set -o noclobber \
 &&   echo '  - vim' \
 &&   echo '  - emacs' \
 &&   echo '  - wget' \
-&&   echo '  - py-numpy' \
+&&   echo '  - py-pip' \
+&&   echo '  - py-numpy@1.25' \
+&&   echo '  - py-pyaml' \
+&&   echo '  - py-polars' \
+&&   echo '  - py-pandas~performance' \
+&&   echo '  - py-matplotlib' \
+&&   echo '  - mesa~llvm' \
+&&   echo '  - vtk~mpi~opengl2+python' \
+&&   echo '  - py-h5py' \
 &&   echo '  - exaca@master' \
 &&   echo '  - additivefoam@main' \
 &&   echo '  concretizer:' \
@@ -21,8 +28,8 @@ set -o noclobber \
 &&   echo '    install_tree: /opt/software' \
 &&   echo '  view: /opt/views/view') > /opt/spack-environment/spack.yaml
 
-# Install the software, remove unnecessary deps
-RUN cd /opt/spack-environment && spack env activate . && spack install --fail-fast && spack gc -y
+# Install the software
+RUN cd /opt/spack-environment && spack env activate . && spack install --fail-fast
 
 # Strip all the binaries
 RUN find -L /opt/views/view/* -type f -exec readlink -f '{}' \; | \
@@ -36,11 +43,83 @@ RUN cd /opt/spack-environment && \
     spack env activate --sh -d . > activate.sh
 
 
+# This section should eventually be moved into spack installs
+# Install 3DThesis
+ENV THESIS_DIR=/opt/3DThesis
+RUN . /opt/spack-environment/activate.sh && \
+    THESIS_VERSION=master.tar.gz && \
+    THESIS_ARCHIVE=3DThesis-${THESIS_VERSION} && \
+    THESIS_URL=https://github.com/ORNL-MDF/3DThesis/archive/refs/heads/${THESIS_VERSION} && \
+    wget --quiet ${THESIS_URL} --output-document=${THESIS_ARCHIVE} && \
+    mkdir -p 3dthesis && \
+    tar -xf ${THESIS_ARCHIVE} -C 3dthesis --strip-components=1 && \
+    cd 3dthesis && \
+    cmake -B build \
+      -D CMAKE_INSTALL_PREFIX=${THESIS_DIR} \
+      -D CMAKE_BUILD_TYPE=Debug && \
+    cmake --build build && \
+    cmake --install build
+RUN echo 'PATH="/opt/3DThesis/bin:$PATH"' >> activate.sh
+
+# Get Mist
+ENV MIST_DIR=/opt/mist
+RUN . /opt/spack-environment/activate.sh && \
+    MIST_VERSION=main.tar.gz && \
+    MIST_ARCHIVE=mist-${MIST_VERSION} && \
+    MIST_URL=https://github.com/ORNL-MDF/Mist/archive/refs/heads/${MIST_VERSION} && \
+    wget --quiet ${MIST_URL} --output-document=${MIST_ARCHIVE} && \
+    mkdir -p ${MIST_DIR} && \
+    tar -xf ${MIST_ARCHIVE} -C ${MIST_DIR} --strip-components=1 && \
+    python3 -m pip --upgrade && \
+    python3 -m pip install ${MIST_DIR} --root-user-action=ignore
+# Get bnpy
+ENV BNPY_DIR=/opt/bnpy
+RUN . /opt/spack-environment/activate.sh && \
+    BNPY_VERSION=master.tar.gz && \
+    BNPY_ARCHIVE=bnpy-${BNPY_VERSION} && \
+    BNPY_URL=https://github.com/gknapp1/bnpy/archive/refs/heads/${BNPY_VERSION} && \
+    wget --quiet ${BNPY_URL} --output-document=${BNPY_ARCHIVE} && \
+    mkdir -p ${BNPY_DIR} && \
+    tar -xf ${BNPY_ARCHIVE} -C ${BNPY_DIR} --strip-components=1 && \
+    python3 -m pip --upgrade && \
+    python3 -m pip install ${BNPY_DIR} --root-user-action=ignore
+# Get pyebsd
+ENV PYEBSD_DIR=/opt/pyebsd
+RUN . /opt/spack-environment/activate.sh && \
+    PYEBSD_VERSION=master.tar.gz && \
+    PYEBSD_ARCHIVE=pyebsd-${PYEBSD_VERSION} && \
+    PYEBSD_URL=https://github.com/arthursn/pyebsd/archive/refs/heads/${PYEBSD_VERSION} && \
+    wget --quiet ${PYEBSD_URL} --output-document=${PYEBSD_ARCHIVE} && \
+    mkdir -p ${PYEBSD_DIR} && \
+    tar -xf ${PYEBSD_ARCHIVE} -C ${PYEBSD_DIR} --strip-components=1 && \
+    python3 -m pip --upgrade && \
+    python3 -m pip install ${PYEBSD_DIR} --root-user-action=ignore
+# Get Myna
+ENV MYNA_DIR=/opt/myna
+RUN . /opt/spack-environment/activate.sh && \
+    MYNA_VERSION=main.tar.gz && \
+    MYNA_ARCHIVE=myna-${MYNA_VERSION} && \
+    MYNA_URL=https://github.com/ORNL-MDF/Myna/archive/refs/heads/${MYNA_VERSION} && \
+    wget --quiet ${MYNA_URL} --output-document=${MYNA_ARCHIVE} && \
+    mkdir -p ${MYNA_DIR} && \
+    tar -xf ${MYNA_ARCHIVE} -C ${MYNA_DIR} --strip-components=1 && \
+    python3 -m pip --upgrade && \
+    python3 -m pip install ${MYNA_DIR} --root-user-action=ignore
+
+# Clean up packages
+RUN spack gc -y
+
+
 # Bare OS image to run the installed executables
 FROM ubuntu:22.04
 
 COPY --from=builder /opt/spack-environment /opt/spack-environment
 COPY --from=builder /opt/software /opt/software
+COPY --from=builder /opt/3DThesis /opt/3DThesis
+COPY --from=builder /opt/mist /opt/mist
+COPY --from=builder /opt/bnpy /opt/bnpy
+COPY --from=builder /opt/pyebsd /opt/pyebsd
+COPY --from=builder /opt/myna /opt/myna
 
 # paths.view is a symlink, so copy the parent to avoid dereferencing and duplicating it
 COPY --from=builder /opt/views /opt/views

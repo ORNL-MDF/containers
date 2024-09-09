@@ -4,8 +4,18 @@ spack:
   - vim
   - emacs
   - wget
-  # Placeholder for Myna and other dev python packages
-  - py-numpy
+  # (can eventually be removed with myna install)
+  - py-pip
+  - py-numpy@1.25
+  - py-pyaml
+  - py-polars
+  # Enabling "performance" substantially increases build times
+  - py-pandas~performance
+  - py-matplotlib
+  # Only to simplify the stack (vtk dep)
+  - mesa~llvm
+  - vtk~mpi~opengl2+python
+  - py-h5py
   # Myna apps (can eventually be replaced with "myna +exaca +additivefoam")
   - exaca@master
   - additivefoam@main
