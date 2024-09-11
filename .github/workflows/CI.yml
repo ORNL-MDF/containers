@@ -23,7 +23,6 @@ jobs:
     strategy:
       matrix:
         config:
-          - {dockerfile: 'ubuntu', tag: 'latest', build_args: 'TAG=latest'}
           - {dockerfile: 'ubuntu', tag: 'dev', build_args: 'TAG=dev'}
     runs-on: ubuntu-latest
     env:
