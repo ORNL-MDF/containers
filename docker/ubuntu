@@ -3,9 +3,17 @@ FROM spack/ubuntu-jammy:develop
 
 # Get Ubuntu packages
 RUN apt-get update \
-&& apt-get upgrade \
-&& apt-get install -y python3-dev python-is-python3 \
-    build-essential cmake vim emacs wget \
+&& apt-get upgrade -y \
+&& apt-get install -y \
+    python3-dev \
+    python-is-python3 \
+    build-essential \
+    cmake \
+    vim \
+    emacs \
+    wget \
+    libssl-dev \
+    libopenmpi-dev \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
@@ -27,6 +35,7 @@ set -o noclobber \
 RUN cd /opt/spack-environment \
 && spack env activate . \
 && spack external find \
+&& spack compiler find \
 && spack install --fail-fast \
 && find -L /opt/views/view/* -type f -exec readlink -f '{}' \; | \
     xargs file -i | \
