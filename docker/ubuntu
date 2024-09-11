@@ -22,6 +22,19 @@ RUN apt-get update \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
+# Get Myna
+ENV MYNA_DIR=/opt/myna
+RUN MYNA_VERSION=main.tar.gz && \
+    MYNA_ARCHIVE=myna-${MYNA_VERSION} && \
+    MYNA_URL=https://github.com/ORNL-MDF/Myna/archive/refs/heads/${MYNA_VERSION} && \
+    wget --quiet ${MYNA_URL} --output-document=${MYNA_ARCHIVE} && \
+    mkdir -p ${MYNA_DIR} && \
+    tar -xf ${MYNA_ARCHIVE} -C ${MYNA_DIR} --strip-components=1 && \
+    rm -f ${MYNA_ARCHIVE} && \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip install ${MYNA_DIR} --root-user-action=ignore && \
+    python3 -m pip cache purge
+
 # What we want to install and how we want to install it
 # is specified in a manifest file (spack.yaml)
 RUN mkdir -p /opt/spack-environment && \
@@ -71,20 +84,6 @@ RUN . /opt/spack-environment/activate.sh && \
     cmake --build build && \
     cmake --install build
 RUN echo 'export PATH="/opt/3DThesis/bin:$PATH"' >> activate.sh
-
-# Get Myna
-ENV MYNA_DIR=/opt/myna
-RUN . /opt/spack-environment/activate.sh && \
-    MYNA_VERSION=main.tar.gz && \
-    MYNA_ARCHIVE=myna-${MYNA_VERSION} && \
-    MYNA_URL=https://github.com/ORNL-MDF/Myna/archive/refs/heads/${MYNA_VERSION} && \
-    wget --quiet ${MYNA_URL} --output-document=${MYNA_ARCHIVE} && \
-    mkdir -p ${MYNA_DIR} && \
-    tar -xf ${MYNA_ARCHIVE} -C ${MYNA_DIR} --strip-components=1 && \
-    rm -f ${MYNA_ARCHIVE} && \
-    python3 -m pip --upgrade && \
-    python3 -m pip install ${MYNA_DIR} --root-user-action=ignore && \
-    python3 -m pip cache purge
 
 # Set entry point
 RUN { \
