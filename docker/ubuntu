@@ -2,6 +2,8 @@
 FROM spack/ubuntu-jammy:develop
 
 # Get Ubuntu packages
+# 1. apt-get install necessary build tools
+# 2. apt-get install dependencies for spack to build correctly
 RUN apt-get update \
 && apt-get upgrade -y \
 && apt-get install -y \
@@ -12,8 +14,11 @@ RUN apt-get update \
     vim \
     emacs \
     wget \
+&& apt-get install -y \
     libssl-dev \
     libopenmpi-dev \
+    libscotch-dev \
+    flex \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
@@ -31,7 +36,8 @@ set -o noclobber \
 &&   echo '    install_tree: /opt/software' \
 &&   echo '  view: /opt/views/view') > /opt/spack-environment/spack.yaml
 
-# Build the spack environment
+# Find apt-get packages, then build the spack environment
+# NOTE: doesn't look like it is finding the system openmpi
 RUN cd /opt/spack-environment \
 && spack env activate . \
 && spack external find \
