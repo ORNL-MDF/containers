@@ -14,6 +14,7 @@ RUN apt-get update \
     vim \
     emacs \
     wget \
+    libgl1 \
 && apt-get install -y \
     libssl-dev \
     libopenmpi-dev \
@@ -34,6 +35,7 @@ RUN MYNA_VERSION=main.tar.gz && \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install ${MYNA_DIR} --root-user-action=ignore && \
     python3 -m pip cache purge
+ENV PYTHONPATH=${PYTHONPATH}:${MYNA_DIR}
 
 # What we want to install and how we want to install it
 # is specified in a manifest file (spack.yaml)
