@@ -84,8 +84,8 @@ RUN . /opt/spack-environment/activate.sh && \
       -D CMAKE_INSTALL_PREFIX=${THESIS_DIR} \
       -D CMAKE_BUILD_TYPE=Debug && \
     cmake --build build && \
-    cmake --install build
-RUN echo 'export PATH="/opt/3DThesis/bin:$PATH"' >> activate.sh
+    cmake --install build && \
+    echo 'export PATH="/opt/3DThesis/bin:$PATH"' >> /opt/spack-environment/activate.sh
 
 # Set entry point
 RUN { \
