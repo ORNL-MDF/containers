@@ -91,6 +91,8 @@ RUN . /opt/spack-environment/activate.sh && \
 RUN { \
       echo '#!/bin/sh' \
       && echo '.' /opt/spack-environment/activate.sh \
+      && echo export OMPI_ALLOW_RUN_AS_ROOT=1 \
+      && echo export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
       && echo 'exec "$@"'; \
     } > /entrypoint.sh \
 && chmod a+x /entrypoint.sh \
