@@ -1,5 +1,7 @@
+# --------------------------------------------------------------------------------------
 # Build stage with Spack pre-installed and ready to be used
-FROM spack/ubuntu-jammy:develop
+FROM spack/ubuntu-jammy:develop AS environment-setup
+# --------------------------------------------------------------------------------------
 
 # Get Ubuntu packages
 # 1. apt-get install necessary build tools
@@ -23,20 +25,10 @@ RUN apt-get update \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
-# Get Myna
-ENV MYNA_DIR=/opt/myna
-RUN MYNA_VERSION=main.tar.gz && \
-    MYNA_ARCHIVE=myna-${MYNA_VERSION} && \
-    MYNA_URL=https://github.com/ORNL-MDF/Myna/archive/refs/heads/${MYNA_VERSION} && \
-    wget --quiet ${MYNA_URL} --output-document=${MYNA_ARCHIVE} && \
-    mkdir -p ${MYNA_DIR} && \
-    tar -xf ${MYNA_ARCHIVE} -C ${MYNA_DIR} --strip-components=1 && \
-    rm -f ${MYNA_ARCHIVE} && \
-    python3 -m pip install --upgrade pip && \
-    python3 -m pip install ${MYNA_DIR} --root-user-action=ignore && \
-    python3 -m pip cache purge
-ENV PYTHONPATH=${PYTHONPATH}:${MYNA_DIR}
-
+# --------------------------------------------------------------------------------------
+# Build stage to build AdditiveFOAM and ExaCA
+FROM environment-setup AS additivefoam-exaca
+# --------------------------------------------------------------------------------------
 # What we want to install and how we want to install it
 # is specified in a manifest file (spack.yaml)
 RUN mkdir -p /opt/spack-environment && \
@@ -69,6 +61,10 @@ RUN cd /opt/spack-environment \
 RUN cd /opt/spack-environment && \
     spack env activate --sh -d . > activate.sh
 
+# --------------------------------------------------------------------------------------
+# Build stage to install 3DThesis
+FROM additivefoam-exaca AS thesis
+# --------------------------------------------------------------------------------------
 # Install 3DThesis
 ENV THESIS_DIR=/opt/3DThesis
 RUN . /opt/spack-environment/activate.sh && \
@@ -86,6 +82,24 @@ RUN . /opt/spack-environment/activate.sh && \
     cmake --build build && \
     cmake --install build && \
     echo 'export PATH="/opt/3DThesis/bin:$PATH"' >> /opt/spack-environment/activate.sh
+
+# --------------------------------------------------------------------------------------
+# Final build stage starting with all Myna external dependencies built to build Myna
+FROM thesis AS myna
+# --------------------------------------------------------------------------------------
+# Get Myna
+ENV MYNA_DIR=/opt/myna
+RUN MYNA_VERSION=main.tar.gz && \
+    MYNA_ARCHIVE=myna-${MYNA_VERSION} && \
+    MYNA_URL=https://github.com/ORNL-MDF/Myna/archive/refs/heads/${MYNA_VERSION} && \
+    wget --quiet ${MYNA_URL} --output-document=${MYNA_ARCHIVE} && \
+    mkdir -p ${MYNA_DIR} && \
+    tar -xf ${MYNA_ARCHIVE} -C ${MYNA_DIR} --strip-components=1 && \
+    rm -f ${MYNA_ARCHIVE} && \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip install ${MYNA_DIR} --root-user-action=ignore && \
+    python3 -m pip cache purge
+ENV PYTHONPATH=${PYTHONPATH}:${MYNA_DIR}
 
 # Set entry point
 RUN { \
