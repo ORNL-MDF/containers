@@ -39,14 +39,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build new image and load it into Docker to test
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ env.docker-tag }}
           file: docker/${{ matrix.config.dockerfile }}
           build-args: ${{ matrix.config.build_args }}
           pull: true
           push: false
-          load: true     
+          load: true
       - name: Push Docker images for Github Container Registry
         uses: docker/build-push-action@v3
         if: ${{ github.event_name == 'push' ||  github.event_name == 'schedule' }}
