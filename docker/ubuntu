@@ -66,13 +66,19 @@ RUN cd /opt/spack-environment \
 RUN cd /opt/spack-environment && \
     spack env activate --sh -d . > activate.sh
 
-# Set entry point
-RUN { \
-      echo '#!/bin/sh' \
-      && echo '.' /opt/spack-environment/activate.sh \
-      && echo export OMPI_ALLOW_RUN_AS_ROOT=1 \
-      && echo export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
-      && echo 'exec "$@"'; \
+# Make .bashrc root profile (used on container restarts)
+# and add container entry point
+RUN mkdir -p /root \
+&&  { \
+      echo "export OMPI_ALLOW_RUN_AS_ROOT=1"; \
+      echo "export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1"; \
+      echo ". /opt/spack/share/spack/setup-env.sh"; \
+      echo ". /opt/spack-environment/activate.sh"; \
+    } > /root/.bashrc \
+&&  { \
+      echo '#!/bin/sh'; \
+      echo ". /root/.bashrc"; \
+      echo 'exec "$@"'; \
     } > /entrypoint.sh \
 && chmod a+x /entrypoint.sh \
 && ln -s /opt/views/view /opt/view
