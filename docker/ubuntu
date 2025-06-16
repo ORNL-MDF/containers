@@ -14,11 +14,7 @@ RUN apt-get update \
     vim \
     emacs \
     wget \
-    libgl1 \
-&& apt-get install -y \
     libssl-dev \
-    libopenmpi-dev \
-    libscotch-dev \
     flex \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
@@ -52,7 +48,7 @@ set -o noclobber \
 &&   echo '  view: /opt/views/view') > /opt/spack-environment/spack.yaml
 
 # Find apt-get packages, then build the spack environment
-# NOTE: doesn't look like it is finding the system openmpi
+# NOTE: could use "spack --backtrace external find openmpi" etc.
 RUN cd /opt/spack-environment \
 && spack env activate . \
 && spack external find \
