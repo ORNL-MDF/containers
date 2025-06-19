@@ -41,6 +41,7 @@ set -o noclobber \
 &&   echo '  - mpich@4.3.0' \
 &&   echo '  - exaca@master' \
 &&   echo '  - additivefoam@main' \
+&&   echo '  - thesis@master+mpi' \
 &&   echo '  concretizer:' \
 &&   echo '    unify: true' \
 &&   echo '  config:' \
@@ -64,24 +65,6 @@ RUN cd /opt/spack-environment \
 # Modifications to the environment that are necessary to run
 RUN cd /opt/spack-environment && \
     spack env activate --sh -d . > activate.sh
-
-# Install 3DThesis
-ENV THESIS_DIR=/opt/3DThesis
-RUN . /opt/spack-environment/activate.sh && \
-    THESIS_VERSION=master.tar.gz && \
-    THESIS_ARCHIVE=3DThesis-${THESIS_VERSION} && \
-    THESIS_URL=https://github.com/ORNL-MDF/3DThesis/archive/refs/heads/${THESIS_VERSION} && \
-    wget --quiet ${THESIS_URL} --output-document=${THESIS_ARCHIVE} && \
-    mkdir -p 3dthesis && \
-    tar -xf ${THESIS_ARCHIVE} -C 3dthesis --strip-components=1 && \
-    rm -f ${THESIS_ARCHIVE} && \
-    cd 3dthesis && \
-    cmake -B build \
-      -D CMAKE_INSTALL_PREFIX=${THESIS_DIR} \
-      -D CMAKE_BUILD_TYPE=Debug && \
-    cmake --build build && \
-    cmake --install build && \
-    echo 'export PATH="/opt/3DThesis/bin:$PATH"' >> /opt/spack-environment/activate.sh
 
 # Set entry point
 RUN { \
