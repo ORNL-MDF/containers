@@ -47,7 +47,8 @@ set -o noclobber \
 &&   echo '  concretizer:' \
 &&   echo '    unify: true' \
 &&   echo '  config:' \
-&&   echo '    install_tree: /opt/software' \
+&&   echo '    install_tree:' \
+&&   echo '      root: /opt/software' \
 &&   echo '  view: /opt/views/view') > /opt/spack-environment/spack.yaml
 
 # Find apt-get packages, then build the spack environment
