@@ -1,5 +1,5 @@
 # Repository-owned Ubuntu Noble base for ORNL-MDF workflow images.
-ARG SPACK_UBUNTU_NOBLE_IMAGE=spack/ubuntu-noble:develop
+ARG SPACK_UBUNTU_NOBLE_IMAGE=spack/ubuntu-noble@sha256:c5286e543f226f2c36a6a5ae4c845bc1cd78fad9ece2704dd16256ae774a5d4f
 FROM ${SPACK_UBUNTU_NOBLE_IMAGE}
 ARG SPACK_UBUNTU_NOBLE_IMAGE
 ARG GIT_REVISION=local
@@ -10,7 +10,8 @@ ENV MDF_GID=1000
 ENV MDF_WORKDIR=/workspace
 ENV MAKEFLAGS=
 
-COPY config/spack/base.yaml /opt/spack-environment/spack.yaml
+COPY config/spack/base.yaml /opt/spack-environment/base.yaml
+COPY config/spack/ubuntu.yaml /opt/spack-environment/spack.yaml
 
 RUN apt-get update \
 &&  apt-get install -y --no-install-recommends \

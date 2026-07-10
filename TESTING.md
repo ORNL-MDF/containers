@@ -20,16 +20,17 @@ Use `--print` with representative immutable inputs when modifying Bake variables
 Docker build arguments, or OCI labels:
 
 ```sh
-RELEASE_DATE=2026-07-10 \
+RELEASE_TAG=2026-07-10 \
 RELEASE_CREATED=2026-07-10T12:00:00Z \
 GIT_REVISION=abc123 \
-SPACK_UBUNTU_NOBLE_IMAGE='spack/ubuntu-noble@sha256:<digest>' \
-OPENFOAM_IMAGE='openfoam/openfoam10-paraview510@sha256:<digest>' \
-ADDITIVEFOAM_REF=<commit> \
+SPACK_UBUNTU_NOBLE_IMAGE='spack/ubuntu-noble@sha256:c5286e543f226f2c36a6a5ae4c845bc1cd78fad9ece2704dd16256ae774a5d4f' \
+OPENFOAM_IMAGE='openfoam/openfoam10-paraview510@sha256:d6ff1f9a2e7bc3c9177f373bebbdeb542fd8b49144afc24d5e3a3cd9bfae253d' \
+ADDITIVEFOAM_REF=b8f6d48c53555c303fa8186c895aee5712b6ea02 \
 docker buildx bake --print ubuntu additivefoam
 ```
 
-Confirm the rendered output has date-only tags and OCI `source`, `version`,
+Confirm the rendered output has a date tag, optionally followed by an alphabetic suffix,
+and OCI `source`, `version`,
 `revision`, and `created` labels. Do not substitute a real published date and push
 from a local machine.
 
@@ -40,18 +41,17 @@ from a local machine.
 | `scripts/` or `docs/` generation | Unit test and inspect generated Markdown fixture output. |
 | `docker-bake.hcl` | Bake print with defaults and injected immutable inputs. |
 | Dockerfile | Bake print; use CI for a real build when external images are required. |
-| `config/spack/exaca.yaml` | Verify `exaca` is selected; CI refreshes `exaca.lock`. |
-| `config/spack/thesis.yaml` | Verify `thesis` is selected; CI refreshes `thesis.lock`. |
-| `config/spack/base.yaml` or `images/ubuntu/` | Verify `ubuntu`, `exaca`, and `thesis` are selected. |
+| `config/spack/<target>.yaml` | Verify its Bake target is selected; CI refreshes its lockfile. |
+| `config/spack/base.yaml` or `images/ubuntu/` | Verify `ubuntu` and its Bake dependents are selected. |
 | Workflow | Run the fast checks and review shell quoting, permissions, and push-only steps. |
 
 ## CI-Only Validation
 
 GitHub Actions is the release test for registry-dependent behavior. On a `main` push
-it resolves external image digests and AdditiveFOAM's commit, rejects an existing
-same-day tag, publishes affected images, extracts embedded inventory from stopped
-containers, and commits catalog pages and new Spack locks. Validate the workflow log
-and resulting `docs/containers/` pages after such a release.
+it uses the pinned external inputs, assigns the next immutable UTC release tag,
+preflights embedded inventory before publication, publishes affected images, and commits
+catalog pages and new Spack locks. Validate the workflow log and resulting
+`docs/containers/` pages after such a release.
 
 If DNS, registry authentication, or external network access is unavailable locally,
 do not treat a failed full Docker build as a Dockerfile failure; report the limitation

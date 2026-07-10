@@ -17,6 +17,7 @@ images/
 config/
   spack/
     base.yaml
+    ubuntu.yaml
     exaca.yaml
     ...
 docker-bake.hcl
@@ -29,19 +30,19 @@ local builds and CI.
 ## Image Layout
 
 ```text
-spack/ubuntu-noble:develop -> ghcr.io/ornl-mdf/containers/ubuntu:develop
-openfoam/openfoam10-paraview510 + AdditiveFOAM 1.2.0 -> ghcr.io/ornl-mdf/containers/additivefoam:1.2.0
+spack/ubuntu-noble@sha256:<digest> -> ghcr.io/ornl-mdf/containers/ubuntu:<release-tag>
+openfoam/openfoam10-paraview510@sha256:<digest> + AdditiveFOAM commit -> ghcr.io/ornl-mdf/containers/additivefoam:<release-tag>
 ubuntu target/image -> exaca target
 ubuntu target/image -> thesis target
 ```
 
-`ubuntu:<YYYY-MM-DD>` is the repo-owned base image with apt packages and shared Spack
+`ubuntu:<release-tag>` is the repo-owned base image with apt packages and shared Spack
 activation. This is intended to the base image for other containers and different
 base images for software should only be used if there a specific environment constraint.
 
-`exaca:<YYYY-MM-DD>` and `thesis:<YYYY-MM-DD>` reuse the `ubuntu` container as their build base.
+`exaca:<release-tag>` and `thesis:<release-tag>` reuse the `ubuntu` container as their build base.
 
-`additivefoam:<YYYY-MM-DD>` repackages the OpenFOAM Foundation v10 image and layers
+`additivefoam:<release-tag>` repackages the OpenFOAM Foundation v10 image and layers
 AdditiveFOAM 1.2.0 on top of it.
 
 All repo-owned images default to the non-root `mdf` runtime user. Build steps
@@ -81,8 +82,10 @@ done
 `docker-bake.hcl` defaults to `type=docker`, so successful local builds are
 loaded directly into the local Docker image store.
 
-Published tags are immutable UTC release dates. The exact installed package versions,
-base-image digest, and source revisions for each tag are listed in
+Published tags are immutable UTC release identifiers. The first daily batch uses
+`YYYY-MM-DD`; CI assigns later same-day batches `YYYY-MM-DD-<suffix>`, progressing
+from `a` through `z`, then `aa`. The exact installed package versions, base-image
+digest, and source revisions for each tag are listed in
 [`docs/containers/`](docs/containers/README.md), so no container needs to be started
 to inspect its software.
 
@@ -99,7 +102,7 @@ Override them individually when needed:
 
 ```sh
 REGISTRY=ghcr.io/ornl-mdf/containers \
-RELEASE_DATE="$(date -u +%F)" \
+RELEASE_TAG="$(date -u +%F)" \
 docker buildx bake
 ```
 
@@ -107,7 +110,7 @@ The deafult user for the containers is `mdf`. If a debugging session requires
 root inside a container, override the runtime user explicitly:
 
 ```sh
-docker run --user root -it ghcr.io/ornl-mdf/containers/ubuntu:<YYYY-MM-DD> /bin/bash
+docker run --user root -it ghcr.io/ornl-mdf/containers/ubuntu:<release-tag> /bin/bash
 ```
 
 To generate a local-only copy of the container documentation after building
@@ -130,7 +133,9 @@ done
 
 ## CI Rebuild Policy
 
-CI rebuilds only affected targets. Changes under `images/ubuntu/`,
-`config/spack/base.yaml`, or `docker-bake.hcl` rebuild `ubuntu`, `exaca`, and
-`thesis`. Changes under a solver image directory rebuild only that image unless
-it depends on `ubuntu`.
+CI discovers packages from public Bake targets whose Dockerfile is
+`images/<target>/Dockerfile`. It rebuilds the changed target and every target that
+depends on it through a Bake `target:` context. `config/spack/<target>.yaml` changes
+rebuild that target and refresh its generated lockfile; `config/spack/base.yaml`
+rebuilds `ubuntu` and its dependents. Changes to `docker-bake.hcl` or `.dockerignore`
+rebuild every discovered package.

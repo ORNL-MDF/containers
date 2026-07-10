@@ -1,0 +1,4 @@
+spack:
+  include:
+  - base.yaml
+  specs: []

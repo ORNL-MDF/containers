@@ -5,7 +5,8 @@ ARG GIT_REVISION=local
 
 COPY config/spack/ /tmp/spack-config/
 
-RUN cp /tmp/spack-config/exaca.yaml /opt/spack-environment/spack.yaml \
+RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
+&&  cp /tmp/spack-config/exaca.yaml /opt/spack-environment/spack.yaml \
 &&  if [ -f /tmp/spack-config/exaca.lock ]; then cp /tmp/spack-config/exaca.lock /opt/spack-environment/spack.lock; fi \
 &&  cd /opt/spack-environment \
 &&  spack env activate . \

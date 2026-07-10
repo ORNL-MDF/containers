@@ -5,7 +5,8 @@ ARG GIT_REVISION=local
 
 COPY config/spack/ /tmp/spack-config/
 
-RUN cp /tmp/spack-config/thesis.yaml /opt/spack-environment/spack.yaml \
+RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
+&&  cp /tmp/spack-config/thesis.yaml /opt/spack-environment/spack.yaml \
 &&  if [ -f /tmp/spack-config/thesis.lock ]; then cp /tmp/spack-config/thesis.lock /opt/spack-environment/spack.lock; fi \
 &&  cd /opt/spack-environment \
 &&  spack env activate . \
