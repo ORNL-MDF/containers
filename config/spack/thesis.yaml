@@ -1,0 +1,10 @@
+spack:
+  specs:
+  - mpich@4.3.0
+  - thesis@4.0.0+mpi
+  concretizer:
+    unify: true
+  config:
+    install_tree:
+      root: /opt/software
+  view: /opt/views/view

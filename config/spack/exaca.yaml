@@ -1,0 +1,11 @@
+spack:
+  specs:
+  - mpich@4.3.0
+  - exaca@2.0.1
+  - kokkos@4.7.04
+  concretizer:
+    unify: true
+  config:
+    install_tree:
+      root: /opt/software
+  view: /opt/views/view

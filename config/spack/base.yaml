@@ -1,0 +1,8 @@
+spack:
+  specs: []
+  concretizer:
+    unify: true
+  config:
+    install_tree:
+      root: /opt/software
+  view: /opt/views/view

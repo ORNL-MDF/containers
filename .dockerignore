@@ -1,0 +1,6 @@
+.git
+.github
+.codex
+.agents
+build_*.log
+README.md
