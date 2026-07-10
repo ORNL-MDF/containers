@@ -166,6 +166,14 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.release_tag || 'unreleased' }}
         run: docker buildx bake ${{ needs.detect.outputs.targets }}
 
+      - name: Smoke test built containers
+        if: steps.release.outputs.reuse != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag || 'unreleased' }}
+          TARGETS: ${{ needs.detect.outputs.targets }}
+        shell: bash
+        run: scripts/container-smoke-tests.sh $TARGETS
+
       - name: Preflight release inventory artifacts
         if: github.event_name == 'push' && steps.release.outputs.reuse != 'true'
         env:

@@ -14,6 +14,27 @@ The unit test validates Markdown catalog generation from a fixture inventory. Th
 Bake command validates target inheritance, build arguments, labels, and tags without
 pulling or building images. `git diff --check` catches whitespace errors.
 
+## Container Smoke Tests
+
+After a successful local build, run the runtime smoke tests against all locally
+loaded `unreleased` images:
+
+```sh
+scripts/container-smoke-tests.sh
+```
+
+Pass one or more target names to limit the test run, for example:
+
+```sh
+scripts/container-smoke-tests.sh exaca thesis
+```
+
+The script checks the non-root Ubuntu runtime environment, the AdditiveFOAM
+tutorial completion marker, and the serial and MPI error paths of ExaCA and
+3DThesis. It expects the solver programs to reject a missing input file; ExaCA
+must also print its version banner. CI runs the same script against every
+affected image after it builds and before a push can publish it.
+
 ## Validate Release Inputs
 
 Use `--print` with representative immutable inputs when modifying Bake variables,
@@ -40,7 +61,7 @@ from a local machine.
 | --- | --- |
 | `scripts/` or `docs/` generation | Unit test and inspect generated Markdown fixture output. |
 | `docker-bake.hcl` | Bake print with defaults and injected immutable inputs. |
-| Dockerfile | Bake print; use CI for a real build when external images are required. |
+| Dockerfile | Bake print; after a successful local build, run the relevant container smoke tests. CI runs them for every affected image. |
 | `config/spack/<target>.yaml` | Verify its Bake target is selected; CI refreshes its lockfile and any dependent lockfiles. |
 | `config/spack/base.yaml` or `images/ubuntu/` | Verify `ubuntu` and its Bake dependents are selected; shared-manifest changes also refresh their locks. |
 | Workflow | Run the fast checks and review shell quoting, permissions, and push-only steps. |

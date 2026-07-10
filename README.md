@@ -101,6 +101,20 @@ exaca:unreleased
 thesis:unreleased
 ```
 
+After a successful build, smoke test the locally loaded images:
+
+```sh
+scripts/container-smoke-tests.sh
+```
+
+To smoke test only the solver images, pass their target names:
+
+```sh
+scripts/container-smoke-tests.sh exaca thesis
+```
+
+The same tests run in CI for every affected image before it can be published.
+
 Override them individually when needed:
 
 ```sh
