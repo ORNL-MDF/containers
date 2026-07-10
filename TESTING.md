@@ -41,8 +41,8 @@ from a local machine.
 | `scripts/` or `docs/` generation | Unit test and inspect generated Markdown fixture output. |
 | `docker-bake.hcl` | Bake print with defaults and injected immutable inputs. |
 | Dockerfile | Bake print; use CI for a real build when external images are required. |
-| `config/spack/<target>.yaml` | Verify its Bake target is selected; CI refreshes its lockfile. |
-| `config/spack/base.yaml` or `images/ubuntu/` | Verify `ubuntu` and its Bake dependents are selected. |
+| `config/spack/<target>.yaml` | Verify its Bake target is selected; CI refreshes its lockfile and any dependent lockfiles. |
+| `config/spack/base.yaml` or `images/ubuntu/` | Verify `ubuntu` and its Bake dependents are selected; shared-manifest changes also refresh their locks. |
 | Workflow | Run the fast checks and review shell quoting, permissions, and push-only steps. |
 
 ## CI-Only Validation

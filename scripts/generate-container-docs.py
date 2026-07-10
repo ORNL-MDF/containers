@@ -54,7 +54,13 @@ def software_rows(inventory: Path) -> list[tuple[str, str]]:
     return sorted(set(rows))
 
 
-def render(image: str, tag: str, digest: str, inventory: Path) -> str:
+def render(
+    image: str,
+    tag: str,
+    digest: str,
+    inventory: Path,
+    base_inventory: Path | None = None,
+) -> str:
     metadata = {}
     for metadata_file in sorted(inventory.glob("*/metadata.env")):
         metadata.update(read_metadata(metadata_file))
@@ -74,6 +80,15 @@ def render(image: str, tag: str, digest: str, inventory: Path) -> str:
         lock_digest = hashlib.sha256(lock_file.read_bytes()).hexdigest()
         lines.append(f"- {lock_file.parent.name} Spack lock SHA-256: `{lock_digest}`")
     rows = software_rows(inventory)
+    if base_inventory is not None:
+        base_rows = set(software_rows(base_inventory))
+        rows = [row for row in rows if row not in base_rows]
+        lines.extend(
+            [
+                "",
+                f"- Shared packages and versions: [ubuntu:{tag}](../ubuntu/{tag}.md)",
+            ]
+        )
     lines.extend(["", "## Installed Software", "", "| Package | Version |", "| --- | --- |"])
     lines.extend(f"| `{name}` | `{version}` |" for name, version in rows)
     lines.append("")
@@ -98,15 +113,25 @@ def main() -> None:
     parser.add_argument("--digest", required=True)
     parser.add_argument("--output-root", type=Path, default=Path("docs/containers"))
     parser.add_argument("--inventory", type=Path)
+    base_group = parser.add_mutually_exclusive_group()
+    base_group.add_argument("--base-inventory", type=Path)
+    base_group.add_argument("--base-image")
     args = parser.parse_args()
 
     inventory = args.inventory or extract_inventory(f"ghcr.io/ornl-mdf/containers/{args.image}:{args.tag}")
+    base_inventory = args.base_inventory
+    if args.base_image:
+        base_inventory = extract_inventory(args.base_image)
     output_dir = args.output_root / args.image
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / f"{args.tag}.md").write_text(render(args.image, args.tag, args.digest, inventory))
+    (output_dir / f"{args.tag}.md").write_text(
+        render(args.image, args.tag, args.digest, inventory, base_inventory)
+    )
     update_index(args.output_root)
     if args.inventory is None:
         shutil.rmtree(inventory.parent)
+    if args.base_image:
+        shutil.rmtree(base_inventory.parent)
 
 
 if __name__ == "__main__":

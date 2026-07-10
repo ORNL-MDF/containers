@@ -182,12 +182,20 @@ jobs:
             container="$(docker create "$reference")"
             docker cp "${container}:/usr/share/ornl-mdf/inventory/${image}/." "${image_root}/${image}"
             docker rm -f "$container" >/dev/null
+          done
+          for image in $TARGETS; do
+            image_root="${inventory_root}/${image}"
+            base_args=()
+            if [ "$image" = exaca ] || [ "$image" = thesis ]; then
+              base_args=(--base-inventory "${inventory_root}/ubuntu")
+            fi
             python3 scripts/generate-container-docs.py \
               --image "$image" \
               --tag "$RELEASE_TAG" \
               --digest sha256:preflight \
               --inventory "$image_root" \
-              --output-root "$RUNNER_TEMP/preflight-container-docs/${image}"
+              --output-root "$RUNNER_TEMP/preflight-container-docs/${image}" \
+              "${base_args[@]}"
           done
 
       - name: Publish preflighted images
@@ -246,11 +254,16 @@ jobs:
               digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$reference")"
               digest="${digest#*@}"
             fi
+            base_args=()
+            if [ "$image" = exaca ] || [ "$image" = thesis ]; then
+              base_args=(--base-inventory "${inventory_root}/ubuntu")
+            fi
             python3 scripts/generate-container-docs.py \
               --image "$image" \
               --tag "$RELEASE_TAG" \
               --digest "$digest" \
-              --inventory "$image_root"
+              --inventory "$image_root" \
+              "${base_args[@]}"
             if [ -f "${image_root}/${image}/spack.lock" ]; then
               cp "${image_root}/${image}/spack.lock" "config/spack/${image}.lock"
               echo "Captured locked Spack environment for ${image}"

@@ -39,6 +39,21 @@ def reverse_dependencies(packages: dict[str, dict[str, Any]]) -> dict[str, set[s
     return dependents
 
 
+def dependencies(packages: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
+    """Map a package to the repository targets it consumes through target: contexts."""
+    result = {name: set() for name in packages}
+    for name, target in packages.items():
+        contexts = target.get("contexts", {})
+        if not isinstance(contexts, dict):
+            continue
+        for context in contexts.values():
+            if isinstance(context, str) and context.startswith("target:"):
+                dependency = context.removeprefix("target:")
+                if dependency in result:
+                    result[name].add(dependency)
+    return result
+
+
 def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list[str], list[str]]:
     """Return selected packages and Spack lockfiles to regenerate."""
     packages = package_targets(bake)
@@ -57,6 +72,7 @@ def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list
 
         if path == "config/spack/base.yaml" and "ubuntu" in package_names:
             selected.add("ubuntu")
+            refresh_locks.add("ubuntu")
 
         if len(parts) == 3 and parts[:2] == ("config", "spack") and path.endswith(".yaml"):
             package = Path(parts[2]).stem
@@ -72,6 +88,17 @@ def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list
             if dependent not in selected:
                 selected.add(dependent)
                 pending.append(dependent)
+            if dependency in refresh_locks:
+                refresh_locks.add(dependent)
+
+    required = list(selected)
+    package_dependencies = dependencies(packages)
+    while required:
+        package = required.pop()
+        for dependency in package_dependencies[package]:
+            if dependency not in selected:
+                selected.add(dependency)
+                required.append(dependency)
 
     return sorted(selected), sorted(refresh_locks)
 

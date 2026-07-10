@@ -15,18 +15,8 @@ COPY config/spack/ubuntu.yaml /opt/spack-environment/spack.yaml
 
 RUN apt-get update \
 &&  apt-get install -y --no-install-recommends \
-    python3-full \
-    python3-dev \
-    python3-pip \
-    python-is-python3 \
     build-essential \
     cmake \
-    vim \
-    emacs \
-    wget \
-    libssl-dev \
-    libffi-dev \
-    libxrender1 \
     file \
 &&  apt-get clean \
 &&  rm -rf /var/lib/apt/lists/*
@@ -54,6 +44,16 @@ RUN set -eux; \
     fi; \
     mkdir -p "${home_dir}"; \
     cd /opt/spack-environment; \
+    spack env activate .; \
+    spack external find; \
+    spack compiler find; \
+    spack install --fail-fast; \
+    find -L /opt/views/view/* -type f -exec readlink -f '{}' \; | \
+      xargs -r file -i | \
+      grep 'charset=binary' | \
+      grep 'x-executable\|x-archive\|x-sharedlib' | \
+      awk -F: '{print $1}' | xargs -r strip; \
+    spack clean --stage; \
     spack env activate --sh -d . > activate.sh; \
     { \
       echo ". /opt/spack/share/spack/setup-env.sh"; \
@@ -85,6 +85,8 @@ RUN set -eux; \
       echo "base_image=${SPACK_UBUNTU_NOBLE_IMAGE}"; \
       echo "repository_revision=${GIT_REVISION}"; \
     } > /usr/share/ornl-mdf/inventory/ubuntu/metadata.env; \
+    spack find --json > /usr/share/ornl-mdf/inventory/ubuntu/spack.json; \
+    cp spack.lock /usr/share/ornl-mdf/inventory/ubuntu/spack.lock; \
     dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort > /usr/share/ornl-mdf/inventory/ubuntu/apt.tsv
 
 ENTRYPOINT ["/entrypoint.sh"]

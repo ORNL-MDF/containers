@@ -2,6 +2,4 @@ spack:
   include:
   - base.yaml
   specs:
-  - mpich@4.3.0
-  - exaca@2.0.1
-  - kokkos@4.7.04
+  - exaca@2.0.1 ^mpich@4.3.0 ^kokkos@4.7.04

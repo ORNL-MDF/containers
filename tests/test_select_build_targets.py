@@ -30,19 +30,25 @@ class SelectBuildTargetsTests(unittest.TestCase):
     def test_base_change_includes_reverse_dependencies(self):
         self.assertEqual(
             select_targets(BAKE, ["config/spack/base.yaml"]),
-            (["exaca", "thesis", "ubuntu"], []),
+            (["exaca", "thesis", "ubuntu"], ["exaca", "thesis", "ubuntu"]),
         )
 
     def test_manifest_change_selects_package_and_lock(self):
         self.assertEqual(
             select_targets(BAKE, ["config/spack/exaca.yaml"]),
-            (["exaca"], ["exaca"]),
+            (["exaca", "ubuntu"], ["exaca"]),
+        )
+
+    def test_shared_toolchain_manifest_rebuilds_dependents_and_lock(self):
+        self.assertEqual(
+            select_targets(BAKE, ["config/spack/ubuntu.yaml"]),
+            (["exaca", "thesis", "ubuntu"], ["exaca", "thesis", "ubuntu"]),
         )
 
     def test_image_change_selects_package(self):
         self.assertEqual(
             select_targets(BAKE, ["images/thesis/Dockerfile"]),
-            (["thesis"], []),
+            (["thesis", "ubuntu"], []),
         )
 
     def test_bake_change_includes_all_public_packages(self):

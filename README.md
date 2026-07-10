@@ -36,9 +36,12 @@ ubuntu target/image -> exaca target
 ubuntu target/image -> thesis target
 ```
 
-`ubuntu:<release-tag>` is the repo-owned base image with apt packages and shared Spack
-activation. This is intended to the base image for other containers and different
-base images for software should only be used if there a specific environment constraint.
+`ubuntu:<release-tag>` is the repo-owned Spack base image. It contains the shared
+GCC, MPICH, and Kokkos toolchain used by the solver images, together with their
+Spack activation. ExaCA and Thesis reuse this installed store and add only their
+solver-specific packages. This is intended to be the base image for other
+Spack-derived containers; use a different base only when a software environment
+has a specific compatibility constraint.
 
 `exaca:<release-tag>` and `thesis:<release-tag>` reuse the `ubuntu` container as their build base.
 
@@ -123,13 +126,22 @@ for image in ubuntu additivefoam exaca thesis; do
   ref="ghcr.io/ornl-mdf/containers/${image}:unreleased"
   digest="$(docker image inspect --format '{{.Id}}' "$ref")"
 
+  base_args=()
+  if [ "$image" = exaca ] || [ "$image" = thesis ]; then
+    base_args=(--base-image "ghcr.io/ornl-mdf/containers/ubuntu:unreleased")
+  fi
   python3 scripts/generate-container-docs.py \
     --image "$image" \
     --tag unreleased \
     --digest "$digest" \
-    --output-root logs/container-docs
+    --output-root logs/container-docs \
+    "${base_args[@]}"
 done
 ```
+
+ExaCA and Thesis pages link to the matching Ubuntu page for shared package names
+and versions; their Installed Software tables list only software added or changed
+by the solver image.
 
 ## CI Rebuild Policy
 
@@ -139,3 +151,8 @@ depends on it through a Bake `target:` context. `config/spack/<target>.yaml` cha
 rebuild that target and refresh its generated lockfile; `config/spack/base.yaml`
 rebuilds `ubuntu` and its dependents. Changes to `docker-bake.hcl` or `.dockerignore`
 rebuild every discovered package.
+
+The Ubuntu Spack manifest is the shared toolchain contract. Changing
+`config/spack/ubuntu.yaml` rebuilds `ubuntu`, refreshes its lockfile, and rebuilds
+all of its dependent solver images and lockfiles. Changes to the shared
+`config/spack/base.yaml` receive the same treatment.

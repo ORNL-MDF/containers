@@ -7,18 +7,18 @@ COPY config/spack/ /tmp/spack-config/
 
 RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
 &&  cp /tmp/spack-config/exaca.yaml /opt/spack-environment/spack.yaml \
+&&  rm -f /opt/spack-environment/spack.lock \
 &&  if [ -f /tmp/spack-config/exaca.lock ]; then cp /tmp/spack-config/exaca.lock /opt/spack-environment/spack.lock; fi \
 &&  cd /opt/spack-environment \
 &&  spack env activate . \
 &&  spack external find \
-&&  spack compiler find \
 &&  spack install --fail-fast \
 &&  find -L /opt/views/view/* -type f -exec readlink -f '{}' \; | \
-    xargs file -i | \
+    xargs -r file -i | \
     grep 'charset=binary' | \
     grep 'x-executable\|x-archive\|x-sharedlib' | \
     awk -F: '{print $1}' | xargs -r strip \
-&&  spack gc -y \
+&&  spack clean --stage \
 &&  spack env activate --sh -d . > activate.sh \
 &&  mkdir -p /usr/share/ornl-mdf/inventory/exaca \
 &&  { \

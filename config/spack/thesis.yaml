@@ -2,5 +2,4 @@ spack:
   include:
   - base.yaml
   specs:
-  - mpich@4.3.0
-  - thesis@4.0.0+mpi
+  - thesis@4.0.0+mpi ^mpich@4.3.0
