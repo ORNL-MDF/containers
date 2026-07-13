@@ -13,6 +13,16 @@ from typing import Callable, Iterable
 @dataclass(frozen=True)
 class RegistryEntry:
     revision: str | None
+    candidate: str | None = None
+
+
+@dataclass(frozen=True)
+class ReleaseSelection:
+    """A safe action for a release tag discovered in the public registry."""
+
+    tag: str
+    status: str
+    candidate: str | None = None
 
 
 Probe = Callable[[str, str], RegistryEntry | None]
@@ -45,8 +55,13 @@ def select_release_tag(
     selected_targets: Iterable[str],
     revision: str,
     probe: Probe,
-) -> tuple[str, bool]:
-    """Return the next global tag, or reuse a complete matching prior release."""
+) -> ReleaseSelection:
+    """Select a new, resumable, or complete immutable release tag.
+
+    A partial public batch can only be resumed when every existing selected image
+    identifies the same private candidate.  This prevents a retry from mixing
+    independently built images under one release tag.
+    """
     catalog = sorted(set(catalog_targets))
     selected = sorted(set(selected_targets))
     if not catalog or not selected:
@@ -58,16 +73,24 @@ def select_release_tag(
         tag = tag_for_index(date, index)
         entries = {target: probe(target, tag) for target in catalog}
 
-        selected_match = all(
-            entries[target] is not None and entries[target].revision == revision
-            for target in selected
-        )
+        selected_entries = [entries[target] for target in selected]
+        selected_present = [entry for entry in selected_entries if entry is not None]
         batch_consistent = all(entry is None or entry.revision == revision for entry in entries.values())
-        if selected_match and batch_consistent:
-            return tag, True
+        if selected_present and batch_consistent:
+            candidates = {entry.candidate for entry in selected_present}
+            if None in candidates or len(candidates) != 1:
+                raise RuntimeError(
+                    f"release tag {tag} has inconsistent or missing candidate metadata"
+                )
+            candidate = candidates.pop()
+            if len(selected_present) == len(selected) and all(
+                entry is not None and entry.revision == revision for entry in selected_entries
+            ):
+                return ReleaseSelection(tag, "complete", candidate)
+            return ReleaseSelection(tag, "resume", candidate)
 
         if all(entry is None for entry in entries.values()):
-            return tag, False
+            return ReleaseSelection(tag, "new")
 
     raise RuntimeError("could not find an available release suffix")
 
@@ -89,7 +112,10 @@ def registry_probe(registry: str) -> Probe:
             labels = {}
         if not isinstance(labels, dict):
             labels = {}
-        return RegistryEntry(labels.get("org.opencontainers.image.revision"))
+        return RegistryEntry(
+            labels.get("org.opencontainers.image.revision"),
+            labels.get("org.ornl-mdf.containers.candidate"),
+        )
 
     return probe
 
@@ -103,14 +129,23 @@ def main() -> None:
     parser.add_argument("--selected-target", action="append", required=True)
     args = parser.parse_args()
 
-    tag, reuse = select_release_tag(
+    selection = select_release_tag(
         args.date,
         args.catalog_target,
         args.selected_target,
         args.revision,
         registry_probe(args.registry),
     )
-    print(json.dumps({"reuse": reuse, "tag": tag}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "candidate": selection.candidate,
+                "status": selection.status,
+                "tag": selection.tag,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ ENV MAKEFLAGS=
 
 COPY config/spack/base.yaml /opt/spack-environment/base.yaml
 COPY config/spack/ubuntu.yaml /opt/spack-environment/spack.yaml
+COPY config/spack/ /tmp/spack-config/
 
 RUN apt-get update \
 &&  apt-get install -y --no-install-recommends \
@@ -43,6 +44,7 @@ RUN set -eux; \
       exit 1; \
     fi; \
     mkdir -p "${home_dir}"; \
+    if [ -f /tmp/spack-config/ubuntu.lock ]; then cp /tmp/spack-config/ubuntu.lock /opt/spack-environment/spack.lock; fi; \
     cd /opt/spack-environment; \
     spack env activate .; \
     spack external find; \

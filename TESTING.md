@@ -43,6 +43,7 @@ Docker build arguments, or OCI labels:
 ```sh
 RELEASE_TAG=2026-07-10 \
 RELEASE_CREATED=2026-07-10T12:00:00Z \
+RELEASE_CANDIDATE=candidate-2026-07-10-123-1 \
 GIT_REVISION=abc123 \
 SPACK_UBUNTU_NOBLE_IMAGE='spack/ubuntu-noble@sha256:c5286e543f226f2c36a6a5ae4c845bc1cd78fad9ece2704dd16256ae774a5d4f' \
 OPENFOAM_IMAGE='openfoam/openfoam10-paraview510@sha256:d6ff1f9a2e7bc3c9177f373bebbdeb542fd8b49144afc24d5e3a3cd9bfae253d' \
@@ -51,9 +52,8 @@ docker buildx bake --print ubuntu additivefoam
 ```
 
 Confirm the rendered output has a date tag, optionally followed by an alphabetic suffix,
-and OCI `source`, `version`,
-`revision`, and `created` labels. Do not substitute a real published date and push
-from a local machine.
+and OCI `source`, `version`, `revision`, `created`, and candidate labels. Do not
+substitute a real published date and push from a local machine.
 
 ## Change-Specific Coverage
 
@@ -70,9 +70,13 @@ from a local machine.
 
 GitHub Actions is the release test for registry-dependent behavior. On a `main` push
 it uses the pinned external inputs, assigns the next immutable UTC release tag,
-preflights embedded inventory before publication, publishes affected images, and commits
-catalog pages and new Spack locks. Validate the workflow log and resulting
-`docs/containers/` pages after such a release.
+preflights embedded inventory before publication, stages candidates in the private
+`ghcr.io/ornl-mdf/containers-staging` package, promotes verified digests, and commits
+catalog pages and new Spack locks. The catalog commit marks release completion.
+Validate the workflow log and resulting `docs/containers/` pages after such a release.
+Before the first run, provision `ghcr.io/ornl-mdf/containers-staging/<image>` as a
+private package namespace and grant this repository's workflow token package
+write/delete access.
 
 If DNS, registry authentication, or external network access is unavailable locally,
 do not treat a failed full Docker build as a Dockerfile failure; report the limitation

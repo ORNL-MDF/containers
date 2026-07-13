@@ -92,6 +92,14 @@ digest, and source revisions for each tag are listed in
 [`docs/containers/`](docs/containers/README.md), so no container needs to be started
 to inspect its software.
 
+A date-based tag is a completed public release only after it appears in that catalog.
+CI first stages verified images in a private GHCR package, then promotes their exact
+digests to public tags and commits the catalog and generated Spack locks. A failed
+release is resumed only from that same private candidate; CI never rebuilds a
+different image under an allocated public tag.
+The `ghcr.io/ornl-mdf/containers-staging/<image>` packages must remain private and
+grant the repository workflow package write/delete access.
+
 Local builds default to `unreleased`:
 
 ```text
@@ -170,3 +178,7 @@ The Ubuntu Spack manifest is the shared toolchain contract. Changing
 `config/spack/ubuntu.yaml` rebuilds `ubuntu`, refreshes its lockfile, and rebuilds
 all of its dependent solver images and lockfiles. Changes to the shared
 `config/spack/base.yaml` receive the same treatment.
+
+`config/spack/ubuntu.lock` is a build input when present, just like the solver
+lockfiles. CI removes it only when the shared environment manifests require a new
+concrete solution.

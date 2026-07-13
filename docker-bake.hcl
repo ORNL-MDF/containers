@@ -27,6 +27,11 @@ variable "RELEASE_CREATED" {
   default = ""
 }
 
+variable "RELEASE_CANDIDATE" {
+  # CI records the private staging tag used to promote an immutable release.
+  default = ""
+}
+
 variable "OUTPUT_TYPE" {
   default = "docker"
 }
@@ -58,6 +63,7 @@ target "_common" {
     "org.opencontainers.image.version" = "${RELEASE_TAG}"
     "org.opencontainers.image.revision" = "${GIT_REVISION}"
     "org.opencontainers.image.created" = "${RELEASE_CREATED}"
+    "org.ornl-mdf.containers.candidate" = "${RELEASE_CANDIDATE}"
   }
 }
 

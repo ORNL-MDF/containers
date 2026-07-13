@@ -6,7 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from select_release_tag import RegistryEntry, select_release_tag, suffix_for_index, tag_for_index
+from select_release_tag import RegistryEntry, ReleaseSelection, select_release_tag, suffix_for_index, tag_for_index
 
 
 class SelectReleaseTagTests(unittest.TestCase):
@@ -27,13 +27,13 @@ class SelectReleaseTagTests(unittest.TestCase):
 
         self.assertEqual(
             select_release_tag("2026-07-10", ["ubuntu", "exaca"], ["exaca"], "new-revision", probe),
-            ("2026-07-10-a", False),
+            ReleaseSelection("2026-07-10-a", "new"),
         )
 
     def test_reuses_complete_matching_release(self):
         existing = {
-            ("ubuntu", "2026-07-10"): RegistryEntry("revision"),
-            ("exaca", "2026-07-10"): RegistryEntry("revision"),
+            ("ubuntu", "2026-07-10"): RegistryEntry("revision", "candidate-1"),
+            ("exaca", "2026-07-10"): RegistryEntry("revision", "candidate-1"),
         }
 
         def probe(target, tag):
@@ -41,12 +41,12 @@ class SelectReleaseTagTests(unittest.TestCase):
 
         self.assertEqual(
             select_release_tag("2026-07-10", ["ubuntu", "exaca"], ["ubuntu", "exaca"], "revision", probe),
-            ("2026-07-10", True),
+            ReleaseSelection("2026-07-10", "complete", "candidate-1"),
         )
 
     def test_mismatched_batch_does_not_reuse_tag(self):
         existing = {
-            ("ubuntu", "2026-07-10"): RegistryEntry("revision"),
+            ("ubuntu", "2026-07-10"): RegistryEntry("revision", "candidate-1"),
             ("exaca", "2026-07-10"): RegistryEntry("other-revision"),
         }
 
@@ -55,8 +55,28 @@ class SelectReleaseTagTests(unittest.TestCase):
 
         self.assertEqual(
             select_release_tag("2026-07-10", ["ubuntu", "exaca"], ["ubuntu"], "revision", probe),
-            ("2026-07-10-a", False),
+            ReleaseSelection("2026-07-10-a", "new"),
         )
+
+    def test_resumes_a_consistent_partial_release(self):
+        existing = {("ubuntu", "2026-07-10"): RegistryEntry("revision", "candidate-1")}
+
+        def probe(target, tag):
+            return existing.get((target, tag))
+
+        self.assertEqual(
+            select_release_tag("2026-07-10", ["ubuntu", "exaca"], ["ubuntu", "exaca"], "revision", probe),
+            ReleaseSelection("2026-07-10", "resume", "candidate-1"),
+        )
+
+    def test_rejects_partial_release_without_candidate_metadata(self):
+        existing = {("ubuntu", "2026-07-10"): RegistryEntry("revision")}
+
+        def probe(target, tag):
+            return existing.get((target, tag))
+
+        with self.assertRaisesRegex(RuntimeError, "candidate metadata"):
+            select_release_tag("2026-07-10", ["ubuntu", "exaca"], ["ubuntu", "exaca"], "revision", probe)
 
 
 if __name__ == "__main__":
