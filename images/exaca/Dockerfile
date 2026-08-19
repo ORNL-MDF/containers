@@ -2,13 +2,16 @@ FROM ubuntu-base
 
 USER root
 ARG GIT_REVISION=local
+ARG RELEASE_TAG=unreleased
+ARG SPACK_EXACA_MANIFEST=exaca.yaml
+ARG SPACK_EXACA_LOCK=exaca.lock
 
 COPY config/spack/ /tmp/spack-config/
 
 RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
-&&  cp /tmp/spack-config/exaca.yaml /opt/spack-environment/spack.yaml \
+&&  cp "/tmp/spack-config/${SPACK_EXACA_MANIFEST}" /opt/spack-environment/spack.yaml \
 &&  rm -f /opt/spack-environment/spack.lock \
-&&  if [ -f /tmp/spack-config/exaca.lock ]; then cp /tmp/spack-config/exaca.lock /opt/spack-environment/spack.lock; fi \
+&&  if [ -n "${SPACK_EXACA_LOCK}" ] && [ -f "/tmp/spack-config/${SPACK_EXACA_LOCK}" ]; then cp "/tmp/spack-config/${SPACK_EXACA_LOCK}" /opt/spack-environment/spack.lock; fi \
 &&  cd /opt/spack-environment \
 &&  spack env activate . \
 &&  spack external find \
@@ -23,6 +26,8 @@ RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
 &&  mkdir -p /usr/share/ornl-mdf/inventory/exaca \
 &&  { \
       echo "image=exaca"; \
+      echo "release_tag=${RELEASE_TAG}"; \
+      echo "spack_manifest=${SPACK_EXACA_MANIFEST}"; \
       echo "repository_revision=${GIT_REVISION}"; \
     } > /usr/share/ornl-mdf/inventory/exaca/metadata.env \
 &&  spack find --json > /usr/share/ornl-mdf/inventory/exaca/spack.json \

@@ -3,6 +3,7 @@ FROM ${OPENFOAM_IMAGE}
 ARG OPENFOAM_IMAGE
 ARG ADDITIVEFOAM_REF=b8f6d48c53555c303fa8186c895aee5712b6ea02
 ARG GIT_REVISION=local
+ARG RELEASE_TAG=unreleased
 
 ENV MDF_USER=mdf
 ENV MDF_UID=1000
@@ -14,7 +15,6 @@ USER root
 SHELL ["/bin/bash", "-lc"]
 
 ENV ADDITIVEFOAM_DIR=/opt/AdditiveFOAM
-ENV ADDITIVEFOAM_VERSION=1.2.0
 
 RUN set -eux; \
     apt-get update; \
@@ -26,6 +26,7 @@ RUN set -eux; \
     git -C "${ADDITIVEFOAM_DIR}" fetch --depth 1 origin "${ADDITIVEFOAM_REF}"; \
     git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD; \
     additivefoam_revision="$(git -C "${ADDITIVEFOAM_DIR}" rev-parse HEAD)"; \
+    additivefoam_version="$(git -C "${ADDITIVEFOAM_DIR}" describe --tags --abbrev=0)"; \
     for candidate in /opt/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam*/etc/bashrc; do \
       if [ -f "$candidate" ]; then \
         set +u; \
@@ -62,8 +63,10 @@ RUN set -eux; \
     { \
       echo "image=additivefoam"; \
       echo "base_image=${OPENFOAM_IMAGE}"; \
-      echo "additivefoam_version=${ADDITIVEFOAM_VERSION}"; \
+      echo "additivefoam_version=${additivefoam_version}"; \
       echo "additivefoam_revision=${additivefoam_revision}"; \
+      echo "additivefoam_source_ref=${ADDITIVEFOAM_REF}"; \
+      echo "release_tag=${RELEASE_TAG}"; \
       echo "repository_revision=${GIT_REVISION}"; \
     } > /usr/share/ornl-mdf/inventory/additivefoam/metadata.env; \
     dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort > /usr/share/ornl-mdf/inventory/additivefoam/apt.tsv

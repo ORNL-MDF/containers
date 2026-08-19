@@ -3,6 +3,9 @@ ARG SPACK_UBUNTU_NOBLE_IMAGE=spack/ubuntu-noble@sha256:c5286e543f226f2c36a6a5ae4
 FROM ${SPACK_UBUNTU_NOBLE_IMAGE}
 ARG SPACK_UBUNTU_NOBLE_IMAGE
 ARG GIT_REVISION=local
+ARG RELEASE_TAG=unreleased
+ARG SPACK_UBUNTU_MANIFEST=ubuntu.yaml
+ARG SPACK_UBUNTU_LOCK=ubuntu.lock
 
 ENV MDF_USER=mdf
 ENV MDF_UID=1000
@@ -10,8 +13,6 @@ ENV MDF_GID=1000
 ENV MDF_WORKDIR=/workspace
 ENV MAKEFLAGS=
 
-COPY config/spack/base.yaml /opt/spack-environment/base.yaml
-COPY config/spack/ubuntu.yaml /opt/spack-environment/spack.yaml
 COPY config/spack/ /tmp/spack-config/
 
 RUN apt-get update \
@@ -44,7 +45,9 @@ RUN set -eux; \
       exit 1; \
     fi; \
     mkdir -p "${home_dir}"; \
-    if [ -f /tmp/spack-config/ubuntu.lock ]; then cp /tmp/spack-config/ubuntu.lock /opt/spack-environment/spack.lock; fi; \
+    cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml; \
+    cp "/tmp/spack-config/${SPACK_UBUNTU_MANIFEST}" /opt/spack-environment/spack.yaml; \
+    if [ -n "${SPACK_UBUNTU_LOCK}" ] && [ -f "/tmp/spack-config/${SPACK_UBUNTU_LOCK}" ]; then cp "/tmp/spack-config/${SPACK_UBUNTU_LOCK}" /opt/spack-environment/spack.lock; fi; \
     cd /opt/spack-environment; \
     spack env activate .; \
     spack external find; \
@@ -85,6 +88,8 @@ RUN set -eux; \
     { \
       echo "image=ubuntu"; \
       echo "base_image=${SPACK_UBUNTU_NOBLE_IMAGE}"; \
+      echo "release_tag=${RELEASE_TAG}"; \
+      echo "spack_manifest=${SPACK_UBUNTU_MANIFEST}"; \
       echo "repository_revision=${GIT_REVISION}"; \
     } > /usr/share/ornl-mdf/inventory/ubuntu/metadata.env; \
     spack find --json > /usr/share/ornl-mdf/inventory/ubuntu/spack.json; \

@@ -35,25 +35,40 @@ tutorial completion marker, and the serial and MPI error paths of ExaCA and
 must also print its version banner. CI runs the same script against every
 affected image after it builds and before a push can publish it.
 
+## Inspect Resolved Tags
+
+To quickly test which version and tracker tags the current configuration would
+generate without building images, run:
+
+```sh
+python3 scripts/resolve_image_tags.py --mode version
+python3 scripts/resolve_image_tags.py --mode tracker
+```
+
+Use `--target` to narrow the output to specific images. `--mode tracker-targets`
+prints only the images that currently have tracker tags configured.
+
 ## Validate Release Inputs
 
-Use `--print` with representative immutable inputs when modifying Bake variables,
+Use `--print` with representative version-style inputs when modifying Bake variables,
 Docker build arguments, or OCI labels:
 
 ```sh
-RELEASE_TAG=2026-07-10 \
-RELEASE_CREATED=2026-07-10T12:00:00Z \
-RELEASE_CANDIDATE=candidate-2026-07-10-123-1 \
+RELEASE_TAG=mpich4.3.0-kokkos4.7.04 \
+RELEASE_CREATED=2026-08-06T12:00:00Z \
 GIT_REVISION=abc123 \
+SPACK_UBUNTU_MANIFEST=ubuntu.yaml \
+SPACK_UBUNTU_LOCK=ubuntu.lock \
 SPACK_UBUNTU_NOBLE_IMAGE='spack/ubuntu-noble@sha256:c5286e543f226f2c36a6a5ae4c845bc1cd78fad9ece2704dd16256ae774a5d4f' \
 OPENFOAM_IMAGE='openfoam/openfoam10-paraview510@sha256:d6ff1f9a2e7bc3c9177f373bebbdeb542fd8b49144afc24d5e3a3cd9bfae253d' \
 ADDITIVEFOAM_REF=b8f6d48c53555c303fa8186c895aee5712b6ea02 \
 docker buildx bake --print ubuntu additivefoam
 ```
 
-Confirm the rendered output has a date tag, optionally followed by an alphabetic suffix,
-and OCI `source`, `version`, `revision`, `created`, and candidate labels. Do not
-substitute a real published date and push from a local machine.
+Confirm the rendered output has the requested version tag and OCI `source`,
+`version`, `revision`, and `created` labels. For solver tracker changes, also
+validate representative manifest overrides, for example
+`SPACK_EXACA_MANIFEST=exaca-main.yaml SPACK_EXACA_LOCK= docker buildx bake --print exaca`.
 
 ## Change-Specific Coverage
 
@@ -68,15 +83,12 @@ substitute a real published date and push from a local machine.
 
 ## CI-Only Validation
 
-GitHub Actions is the release test for registry-dependent behavior. On a `main` push
-it uses the pinned external inputs, assigns the next immutable UTC release tag,
-preflights embedded inventory before publication, stages candidates in the private
-`ghcr.io/ornl-mdf/containers-staging` package, promotes verified digests, and commits
-catalog pages and new Spack locks. The catalog commit marks release completion.
-Validate the workflow log and resulting `docs/containers/` pages after such a release.
-Before the first run, provision `ghcr.io/ornl-mdf/containers-staging/<image>` as a
-private package namespace and grant this repository's workflow token package
-write/delete access.
+GitHub Actions is the registry-dependent release test. On a `main` push it resolves
+per-image version tags from repo inputs, builds affected images, smoke tests them,
+pushes the resulting tags to GHCR, and commits updated inventory pages and refreshed
+release lockfiles. On the monthly scheduled run it rebuilds configured tracker
+manifests, republishes the moving tracker tags, and commits the updated tracker docs.
+Validate the workflow log and resulting `docs/containers/` pages after such runs.
 
 If DNS, registry authentication, or external network access is unavailable locally,
 do not treat a failed full Docker build as a Dockerfile failure; report the limitation

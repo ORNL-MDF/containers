@@ -10,7 +10,7 @@ class DockerfileTests(unittest.TestCase):
         dockerfile = (ROOT / "images" / "ubuntu" / "Dockerfile").read_text()
         self.assertIn("COPY config/spack/ /tmp/spack-config/", dockerfile)
         self.assertIn(
-            "if [ -f /tmp/spack-config/ubuntu.lock ]; then cp /tmp/spack-config/ubuntu.lock /opt/spack-environment/spack.lock; fi;",
+            'if [ -n "${SPACK_UBUNTU_LOCK}" ] && [ -f "/tmp/spack-config/${SPACK_UBUNTU_LOCK}" ]; then cp "/tmp/spack-config/${SPACK_UBUNTU_LOCK}" /opt/spack-environment/spack.lock; fi;',
             dockerfile,
         )
 

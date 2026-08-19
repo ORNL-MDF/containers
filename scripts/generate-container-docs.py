@@ -56,24 +56,29 @@ def software_rows(inventory: Path) -> list[tuple[str, str]]:
 
 def render(
     image: str,
-    tag: str,
+    page_tag: str,
+    published_tag: str,
     digest: str,
     inventory: Path,
     base_inventory: Path | None = None,
+    base_tag: str | None = None,
 ) -> str:
     metadata = {}
     for metadata_file in sorted(inventory.glob("*/metadata.env")):
         metadata.update(read_metadata(metadata_file))
     lines = [
-        f"# {image}:{tag}",
+        f"# {image}:{page_tag}",
         "",
-        f"- Image: `ghcr.io/ornl-mdf/containers/{image}:{tag}`",
+        f"- Published tag: `ghcr.io/ornl-mdf/containers/{image}:{published_tag}`",
         f"- Digest: `{digest}`",
+        f"- Digest reference: `ghcr.io/ornl-mdf/containers/{image}@{digest}`",
         f"- Repository revision: `{metadata.get('repository_revision', 'not recorded')}`",
         "",
         "## Build Inputs",
         "",
     ]
+    if page_tag != published_tag:
+        lines.append(f"- Snapshot of tag: `{published_tag}`")
     for key in sorted(key for key in metadata if key not in {"image", "repository_revision"}):
         lines.append(f"- {key.replace('_', ' ')}: `{metadata[key]}`")
     for lock_file in sorted(inventory.glob("*/spack.lock")):
@@ -86,7 +91,7 @@ def render(
         lines.extend(
             [
                 "",
-                f"- Shared packages and versions: [ubuntu:{tag}](../ubuntu/{tag}.md)",
+                f"- Shared packages and versions: [ubuntu:{base_tag or published_tag}](../ubuntu/{base_tag or published_tag}.md)",
             ]
         )
     lines.extend(["", "## Installed Software", "", "| Package | Version |", "| --- | --- |"])
@@ -97,7 +102,14 @@ def render(
 
 def update_index(root: Path) -> None:
     entries = sorted(root.glob("*/*.md"))
-    lines = ["# Container Software Inventory", "", "Generated from artifacts embedded in published images.", ""]
+    lines = [
+        "# Container Software Inventory",
+        "",
+        "Generated from inventory artifacts embedded in published images.",
+        "Canonical tag pages show the latest digest for each public tag.",
+        "Snapshot pages preserve prior published digests for reproducible references.",
+        "",
+    ]
     for entry in entries:
         if entry.name == "README.md":
             continue
@@ -110,22 +122,25 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--published-tag")
     parser.add_argument("--digest", required=True)
     parser.add_argument("--output-root", type=Path, default=Path("docs/containers"))
     parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--base-tag")
     base_group = parser.add_mutually_exclusive_group()
     base_group.add_argument("--base-inventory", type=Path)
     base_group.add_argument("--base-image")
     args = parser.parse_args()
 
-    inventory = args.inventory or extract_inventory(f"ghcr.io/ornl-mdf/containers/{args.image}:{args.tag}")
+    published_tag = args.published_tag or args.tag
+    inventory = args.inventory or extract_inventory(f"ghcr.io/ornl-mdf/containers/{args.image}:{published_tag}")
     base_inventory = args.base_inventory
     if args.base_image:
         base_inventory = extract_inventory(args.base_image)
     output_dir = args.output_root / args.image
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / f"{args.tag}.md").write_text(
-        render(args.image, args.tag, args.digest, inventory, base_inventory)
+        render(args.image, args.tag, published_tag, args.digest, inventory, base_inventory, args.base_tag)
     )
     update_index(args.output_root)
     if args.inventory is None:

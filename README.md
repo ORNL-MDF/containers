@@ -25,28 +25,31 @@ docker-bake.hcl
 
 Each image has its own directory, while shared Spack environment definitions
 live under `config/spack`. `docker-bake.hcl` is the single source of truth for
-local builds and CI.
+local builds and CI. Published tag derivation and tracker manifests are declared
+in [`config/image-tags.json`](config/image-tags.json).
 
 ## Image Layout
 
 ```text
-spack/ubuntu-noble@sha256:<digest> -> ghcr.io/ornl-mdf/containers/ubuntu:<release-tag>
-openfoam/openfoam10-paraview510@sha256:<digest> + AdditiveFOAM commit -> ghcr.io/ornl-mdf/containers/additivefoam:<release-tag>
+spack/ubuntu-noble@sha256:<digest> -> ghcr.io/ornl-mdf/containers/ubuntu:<version-tag>
+openfoam/openfoam10-paraview510@sha256:<digest> + AdditiveFOAM commit -> ghcr.io/ornl-mdf/containers/additivefoam:<version-tag>
 ubuntu target/image -> exaca target
 ubuntu target/image -> thesis target
+optional tracker manifests -> moving tags such as exaca:main
 ```
 
-`ubuntu:<release-tag>` is the repo-owned Spack base image. It contains the shared
+`ubuntu:<version-tag>` is the repo-owned Spack base image. It contains the shared
 GCC, MPICH, and Kokkos toolchain used by the solver images, together with their
 Spack activation. ExaCA and Thesis reuse this installed store and add only their
 solver-specific packages. This is intended to be the base image for other
 Spack-derived containers; use a different base only when a software environment
 has a specific compatibility constraint.
 
-`exaca:<release-tag>` and `thesis:<release-tag>` reuse the `ubuntu` container as their build base.
+`exaca:<version-tag>` and `thesis:<version-tag>` reuse the `ubuntu` container as their build base.
 
-`additivefoam:<release-tag>` repackages the OpenFOAM Foundation v10 image and layers
-AdditiveFOAM 1.2.0 on top of it.
+`additivefoam:<version-tag>` repackages the OpenFOAM Foundation v10 image and layers
+an upstream AdditiveFOAM release such as `1.1.0` on top of it. CI also publishes
+`additivefoam:main` as a moving monthly tracker.
 
 All repo-owned images default to the non-root `mdf` runtime user. Build steps
 that need elevated privileges still run as `root` inside the Dockerfile, but
@@ -64,7 +67,7 @@ for target in ubuntu additivefoam exaca thesis; do
 done
 ```
 
-When buildign a single target buildx resolves additional context needed to a build a target from
+When building a single target buildx resolves additional context needed to build a target from
 definitions in `docker-bake.hcl`. Run one target and write its log:
 
 ```sh
@@ -85,20 +88,43 @@ done
 `docker-bake.hcl` defaults to `type=docker`, so successful local builds are
 loaded directly into the local Docker image store.
 
-Published tags are immutable UTC release identifiers. The first daily batch uses
-`YYYY-MM-DD`; CI assigns later same-day batches `YYYY-MM-DD-<suffix>`, progressing
-from `a` through `z`, then `aa`. The exact installed package versions, base-image
-digest, and source revisions for each tag are listed in
-[`docs/containers/`](docs/containers/README.md), so no container needs to be started
-to inspect its software.
+Published tags are derived from repo inputs instead of calendar dates:
 
-A date-based tag is a completed public release only after it appears in that catalog.
-CI first stages verified images in a private GHCR package, then promotes their exact
-digests to public tags and commits the catalog and generated Spack locks. A failed
-release is resumed only from that same private candidate; CI never rebuilds a
-different image under an allocated public tag.
-The `ghcr.io/ornl-mdf/containers-staging/<image>` packages must remain private and
-grant the repository workflow package write/delete access.
+- `ubuntu`: normalized top-level Spack spec versions such as `mpich4.3.0-kokkos4.7.04`
+- `exaca` and `thesis`: top-level solver version such as `2.0.1`
+- `additivefoam`: normalized upstream release tag such as `1.1.0`
+
+These public tags are convenience locators and may move when CI rebuilds a changed
+image from `main`. Workflows that require fixed behavior should pin the image digest,
+for example `ghcr.io/ornl-mdf/containers/exaca@sha256:<digest>`.
+
+The exact installed package versions, base-image digests, source revisions, and
+published digests are listed in [`docs/containers/`](docs/containers/README.md),
+so no container needs to be started to inspect its software.
+
+When configured in `config/image-tags.json`, CI also publishes moving tracker tags
+such as `main` from explicit manifests like `config/spack/exaca-main.yaml`. Those
+tracker tags are rebuilt monthly, and the same digest-pinning guidance applies.
+
+To inspect the tags that the current repo state would publish without building any
+images, run:
+
+```sh
+python3 scripts/resolve_image_tags.py --mode version
+python3 scripts/resolve_image_tags.py --mode tracker
+```
+
+Limit the output to specific images when needed:
+
+```sh
+python3 scripts/resolve_image_tags.py --mode version --target ubuntu --target additivefoam
+python3 scripts/resolve_image_tags.py --mode tracker --target additivefoam --target exaca
+python3 scripts/resolve_image_tags.py --mode tracker-targets
+```
+
+The Spack-derived images resolve entirely from repo state. `additivefoam` also
+consults the upstream AdditiveFOAM repository to determine the current release tag,
+so that lookup is slower and requires network access.
 
 Local builds default to `unreleased`:
 
@@ -127,15 +153,15 @@ Override them individually when needed:
 
 ```sh
 REGISTRY=ghcr.io/ornl-mdf/containers \
-RELEASE_TAG="$(date -u +%F)" \
+RELEASE_TAG=2.0.1 \
 docker buildx bake
 ```
 
-The deafult user for the containers is `mdf`. If a debugging session requires
+The default user for the containers is `mdf`. If a debugging session requires
 root inside a container, override the runtime user explicitly:
 
 ```sh
-docker run --user root -it ghcr.io/ornl-mdf/containers/ubuntu:<release-tag> /bin/bash
+docker run --user root -it ghcr.io/ornl-mdf/containers/ubuntu:<version-tag> /bin/bash
 ```
 
 To generate a local-only copy of the container documentation after building
@@ -172,7 +198,9 @@ CI discovers packages from public Bake targets whose Dockerfile is
 depends on it through a Bake `target:` context. `config/spack/<target>.yaml` changes
 rebuild that target and refresh its generated lockfile; `config/spack/base.yaml`
 rebuilds `ubuntu` and its dependents. Changes to `docker-bake.hcl` or `.dockerignore`
-rebuild every discovered package.
+rebuild every discovered package. Tracker manifest changes such as
+`config/spack/exaca-main.yaml` rebuild the matching image without refreshing the
+release lockfile.
 
 The Ubuntu Spack manifest is the shared toolchain contract. Changing
 `config/spack/ubuntu.yaml` rebuilds `ubuntu`, refreshes its lockfile, and rebuilds
@@ -181,4 +209,4 @@ all of its dependent solver images and lockfiles. Changes to the shared
 
 `config/spack/ubuntu.lock` is a build input when present, just like the solver
 lockfiles. CI removes it only when the shared environment manifests require a new
-concrete solution.
+concrete solution. Monthly tracker rebuilds do not overwrite these release lockfiles.

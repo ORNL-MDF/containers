@@ -2,13 +2,16 @@ FROM ubuntu-base
 
 USER root
 ARG GIT_REVISION=local
+ARG RELEASE_TAG=unreleased
+ARG SPACK_THESIS_MANIFEST=thesis.yaml
+ARG SPACK_THESIS_LOCK=thesis.lock
 
 COPY config/spack/ /tmp/spack-config/
 
 RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
-&&  cp /tmp/spack-config/thesis.yaml /opt/spack-environment/spack.yaml \
+&&  cp "/tmp/spack-config/${SPACK_THESIS_MANIFEST}" /opt/spack-environment/spack.yaml \
 &&  rm -f /opt/spack-environment/spack.lock \
-&&  if [ -f /tmp/spack-config/thesis.lock ]; then cp /tmp/spack-config/thesis.lock /opt/spack-environment/spack.lock; fi \
+&&  if [ -n "${SPACK_THESIS_LOCK}" ] && [ -f "/tmp/spack-config/${SPACK_THESIS_LOCK}" ]; then cp "/tmp/spack-config/${SPACK_THESIS_LOCK}" /opt/spack-environment/spack.lock; fi \
 &&  cd /opt/spack-environment \
 &&  spack env activate . \
 &&  spack external find \
@@ -23,6 +26,8 @@ RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
 &&  mkdir -p /usr/share/ornl-mdf/inventory/thesis \
 &&  { \
       echo "image=thesis"; \
+      echo "release_tag=${RELEASE_TAG}"; \
+      echo "spack_manifest=${SPACK_THESIS_MANIFEST}"; \
       echo "repository_revision=${GIT_REVISION}"; \
     } > /usr/share/ornl-mdf/inventory/thesis/metadata.env \
 &&  spack find --json > /usr/share/ornl-mdf/inventory/thesis/spack.json \

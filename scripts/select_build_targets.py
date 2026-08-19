@@ -62,7 +62,7 @@ def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list
     selected: set[str] = set()
     refresh_locks: set[str] = set()
 
-    if {"docker-bake.hcl", ".dockerignore"} & changed:
+    if {"docker-bake.hcl", ".dockerignore", "config/image-tags.json"} & changed:
         selected.update(package_names)
 
     for path in changed:
@@ -76,9 +76,12 @@ def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list
 
         if len(parts) == 3 and parts[:2] == ("config", "spack") and path.endswith(".yaml"):
             package = Path(parts[2]).stem
+            tracker_package = package.split("-", 1)[0]
             if package in package_names and package != "base":
                 selected.add(package)
                 refresh_locks.add(package)
+            elif tracker_package in package_names and tracker_package != "base":
+                selected.add(tracker_package)
 
     dependents = reverse_dependencies(packages)
     pending = list(selected)

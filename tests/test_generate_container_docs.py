@@ -30,7 +30,7 @@ class GenerateContainerDocsTests(unittest.TestCase):
                     "--image",
                     "exaca",
                     "--tag",
-                    "2026-07-10",
+                    "2.0.1",
                     "--digest",
                     "sha256:published",
                     "--inventory",
@@ -41,11 +41,12 @@ class GenerateContainerDocsTests(unittest.TestCase):
                 check=True,
             )
 
-            page = (output / "exaca" / "2026-07-10.md").read_text()
+            page = (output / "exaca" / "2.0.1.md").read_text()
             self.assertIn("`sha256:published`", page)
+            self.assertIn("`ghcr.io/ornl-mdf/containers/exaca@sha256:published`", page)
             self.assertIn("`spack:exaca`", page)
             self.assertIn("`1.2.3`", page)
-            self.assertIn("[exaca:2026-07-10](exaca/2026-07-10.md)", (output / "README.md").read_text())
+            self.assertIn("[exaca:2.0.1](exaca/2.0.1.md)", (output / "README.md").read_text())
 
     def test_omits_software_shared_with_ubuntu(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -71,12 +72,16 @@ class GenerateContainerDocsTests(unittest.TestCase):
                     "exaca",
                     "--tag",
                     "test",
+                    "--published-tag",
+                    "main",
                     "--digest",
                     "sha256:test",
                     "--inventory",
                     str(root / "exaca"),
                     "--base-inventory",
                     str(root / "ubuntu"),
+                    "--base-tag",
+                    "mpich4.3.0-kokkos4.7.04",
                     "--output-root",
                     str(output),
                 ],
@@ -84,7 +89,8 @@ class GenerateContainerDocsTests(unittest.TestCase):
             )
 
             page = (output / "exaca" / "test.md").read_text()
-            self.assertIn("[ubuntu:test](../ubuntu/test.md)", page)
+            self.assertIn("Snapshot of tag: `main`", page)
+            self.assertIn("[ubuntu:mpich4.3.0-kokkos4.7.04](../ubuntu/mpich4.3.0-kokkos4.7.04.md)", page)
             self.assertNotIn("`cmake`", page)
             self.assertIn("`ninja-build`", page)
             self.assertIn("`python` | `3.13.0`", page)

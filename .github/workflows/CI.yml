@@ -7,9 +7,11 @@ on:
   pull_request:
     branches:
       - main
+  schedule:
+    - cron: "0 6 1 * *"
 
 concurrency:
-  group: ${{ github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.event_name }}-${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -34,7 +36,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+          if [ "${{ github.event_name }}" = schedule ]; then
+            BASE_SHA="$GITHUB_SHA"
+          elif [[ "$BASE_SHA" =~ ^0+$ ]]; then
             BASE_SHA="$(git rev-list --max-parents=0 "$GITHUB_SHA")"
           fi
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
@@ -44,7 +48,6 @@ jobs:
   detect:
     runs-on: ubuntu-latest
     outputs:
-      catalog_targets: ${{ steps.changes.outputs.catalog_targets }}
       refresh_locks: ${{ steps.changes.outputs.refresh_locks }}
       should_build: ${{ steps.changes.outputs.should_build }}
       targets: ${{ steps.changes.outputs.targets }}
@@ -62,6 +65,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "${{ github.event_name }}" = schedule ]; then
+            targets="$(python3 scripts/resolve_image_tags.py --mode tracker-targets | jq -r '.targets | join(" ")')"
+            echo "refresh_locks=" >> "$GITHUB_OUTPUT"
+            echo "targets=${targets}" >> "$GITHUB_OUTPUT"
+            if [ -n "$targets" ]; then
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
 
           head_sha="$GITHUB_SHA"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -82,11 +96,8 @@ jobs:
             --changed-files "$changed_files")"
           echo "$selection"
 
-          catalog_targets="$(jq -r '.catalog_targets | join(" ")' <<< "$selection")"
           targets="$(jq -r '.targets | join(" ")' <<< "$selection")"
           refresh_locks="$(jq -r '.refresh_locks | join(" ")' <<< "$selection")"
-
-          echo "catalog_targets=${catalog_targets}" >> "$GITHUB_OUTPUT"
           echo "refresh_locks=${refresh_locks}" >> "$GITHUB_OUTPUT"
           echo "targets=${targets}" >> "$GITHUB_OUTPUT"
           if [ -n "$targets" ]; then
@@ -100,7 +111,7 @@ jobs:
     needs:
       - validate
       - detect
-    if: needs.detect.outputs.should_build == 'true'
+    if: github.event_name == 'schedule' || needs.detect.outputs.should_build == 'true'
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -111,48 +122,15 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Allocate immutable release tag
-        if: github.event_name == 'push'
-        id: release
-        env:
-          CATALOG_TARGETS: ${{ needs.detect.outputs.catalog_targets }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          command=(
-            python3 scripts/select_release_tag.py
-            --registry ghcr.io/ornl-mdf/containers
-            --date "$(date -u +%F)"
-            --revision "$GITHUB_SHA"
-          )
-          for target in $CATALOG_TARGETS; do
-            command+=(--catalog-target "$target")
-          done
-          for target in $TARGETS; do
-            command+=(--selected-target "$target")
-          done
-          result="$("${command[@]}")"
-          echo "$result"
-          echo "release_tag=$(jq -r '.tag' <<< "$result")" >> "$GITHUB_OUTPUT"
-          status="$(jq -r '.status' <<< "$result")"
-          candidate="$(jq -r '.candidate // empty' <<< "$result")"
-          if [ "$status" = new ]; then
-            candidate="candidate-$(jq -r '.tag' <<< "$result")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          fi
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          echo "candidate_tag=${candidate}" >> "$GITHUB_OUTPUT"
-          echo "release_created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       - name: Refresh changed Spack locks
-        if: needs.detect.outputs.refresh_locks != '' && (github.event_name == 'pull_request' || steps.release.outputs.status == 'new')
+        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
         env:
           LOCKS: ${{ needs.detect.outputs.refresh_locks }}
         shell: bash
@@ -162,159 +140,106 @@ jobs:
             rm -f "config/spack/${image}.lock"
           done
 
-      - name: Build affected targets
-        if: github.event_name == 'pull_request' || steps.release.outputs.status == 'new'
+      - name: Build, test, publish, and document images
         env:
+          ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
+          EVENT_NAME: ${{ github.event_name }}
           GIT_REVISION: ${{ github.sha }}
-          OUTPUT_TYPE: docker
-          PUSH: "false"
-          RELEASE_CREATED: ${{ steps.release.outputs.release_created || '' }}
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag || 'unreleased' }}
-          RELEASE_CANDIDATE: ${{ steps.release.outputs.candidate_tag || '' }}
-        run: docker buildx bake ${{ needs.detect.outputs.targets }}
-
-      - name: Smoke test built containers
-        if: github.event_name == 'pull_request' || steps.release.outputs.status == 'new'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag || 'unreleased' }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: scripts/container-smoke-tests.sh $TARGETS
-
-      - name: Preflight release inventory artifacts
-        if: github.event_name == 'push' && steps.release.outputs.status == 'new'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
         run: |
           set -euo pipefail
-          inventory_root="$RUNNER_TEMP/release-inventories"
-          for image in $TARGETS; do
-            reference="ghcr.io/ornl-mdf/containers/${image}:${RELEASE_TAG}"
-            image_root="${inventory_root}/${image}"
-            mkdir -p "${image_root}/${image}"
-            container="$(docker create "$reference")"
-            docker cp "${container}:/usr/share/ornl-mdf/inventory/${image}/." "${image_root}/${image}"
-            docker rm -f "$container" >/dev/null
+
+          release_created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          resolve_args=(python3 scripts/resolve_image_tags.py --additivefoam-ref "$ADDITIVEFOAM_REF")
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            resolve_args+=(--mode tracker)
+          else
+            resolve_args+=(--mode version)
+          fi
+          for target in $TARGETS; do
+            resolve_args+=(--target "$target")
           done
-          for image in $TARGETS; do
-            image_root="${inventory_root}/${image}"
-            base_args=()
-            if [ "$image" = exaca ] || [ "$image" = thesis ]; then
-              base_args=(--base-inventory "${inventory_root}/ubuntu")
+          plans="$("${resolve_args[@]}")"
+          echo "$plans"
+
+          while IFS= read -r plan; do
+            image="$(jq -r '.image' <<< "$plan")"
+            tag="$(jq -r '.tag' <<< "$plan")"
+            kind="$(jq -r '.kind' <<< "$plan")"
+            base_tag="$(jq -r '.base_tag // empty' <<< "$plan")"
+            lockfile="$(jq -r '.lockfile // empty' <<< "$plan")"
+            build_args_file="$(mktemp)"
+            jq -r '.build_args | to_entries[] | "\(.key)=\(.value)"' <<< "$plan" > "$build_args_file"
+
+            build_cmd=(docker buildx bake "$image")
+            while IFS='=' read -r key value; do
+              [ -n "$key" ] || continue
+              build_cmd+=(--set "${image}.args.${key}=${value}")
+            done < "$build_args_file"
+
+            export OUTPUT_TYPE=docker
+            export PUSH=false
+            export RELEASE_TAG="$tag"
+            export RELEASE_CREATED="$release_created"
+            export GIT_REVISION
+            echo "Building ${image}:${tag} (${kind})"
+            "${build_cmd[@]}"
+
+            REGISTRY=ghcr.io/ornl-mdf/containers RELEASE_TAG="$tag" scripts/container-smoke-tests.sh "$image"
+
+            if [ "$EVENT_NAME" != "pull_request" ]; then
+              reference="ghcr.io/ornl-mdf/containers/${image}:${tag}"
+              docker image push "$reference"
+              digest="sha256:$(docker buildx imagetools inspect "$reference" --raw | sha256sum | cut -d' ' -f1)"
+
+              inventory_root="$RUNNER_TEMP/release-inventories/${image}"
+              mkdir -p "${inventory_root}/${image}"
+              container="$(docker create "$reference")"
+              docker cp "${container}:/usr/share/ornl-mdf/inventory/${image}/." "${inventory_root}/${image}"
+              docker rm -f "$container" >/dev/null
+
+              base_args=()
+              if [ -n "$base_tag" ]; then
+                base_reference="ghcr.io/ornl-mdf/containers/ubuntu:${base_tag}"
+                base_root="$RUNNER_TEMP/release-inventories/ubuntu-${base_tag}"
+                mkdir -p "${base_root}/ubuntu"
+                base_container="$(docker create "$base_reference")"
+                docker cp "${base_container}:/usr/share/ornl-mdf/inventory/ubuntu/." "${base_root}/ubuntu"
+                docker rm -f "$base_container" >/dev/null
+                base_args=(--base-inventory "$base_root" --base-tag "$base_tag")
+              fi
+
+              python3 scripts/generate-container-docs.py \
+                --image "$image" \
+                --tag "$tag" \
+                --digest "$digest" \
+                --inventory "$inventory_root" \
+                --output-root docs/containers \
+                "${base_args[@]}"
+
+              if [ "$kind" = "version" ]; then
+                snapshot_tag="${tag}-$(date -u +%Y%m%d)-${GIT_REVISION::7}"
+              else
+                snapshot_tag="${tag}-$(date -u +%Y-%m)"
+              fi
+              python3 scripts/generate-container-docs.py \
+                --image "$image" \
+                --tag "$snapshot_tag" \
+                --published-tag "$tag" \
+                --digest "$digest" \
+                --inventory "$inventory_root" \
+                --output-root docs/containers \
+                "${base_args[@]}"
+
+              if [ -n "$lockfile" ] && [ -f "${inventory_root}/${image}/spack.lock" ]; then
+                cp "${inventory_root}/${image}/spack.lock" "config/spack/${image}.lock"
+              fi
             fi
-            python3 scripts/generate-container-docs.py \
-              --image "$image" \
-              --tag "$RELEASE_TAG" \
-              --digest sha256:preflight \
-              --inventory "$image_root" \
-              --output-root "$RUNNER_TEMP/preflight-container-docs/${image}" \
-              "${base_args[@]}"
-          done
-
-      - name: Stage verified images in the private registry
-        if: github.event_name == 'push' && steps.release.outputs.status == 'new'
-        env:
-          CANDIDATE_TAG: ${{ steps.release.outputs.candidate_tag }}
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for image in $TARGETS; do
-            public_reference="ghcr.io/ornl-mdf/containers/${image}:${RELEASE_TAG}"
-            candidate_reference="ghcr.io/ornl-mdf/containers-staging/${image}:${CANDIDATE_TAG}"
-            docker tag "$public_reference" "$candidate_reference"
-            docker image push "$candidate_reference"
-            labels="$(docker buildx imagetools inspect "$candidate_reference" --format '{{json .Config.Labels}}')"
-            test "$(jq -r '."org.opencontainers.image.revision"' <<< "$labels")" = "$GITHUB_SHA"
-            test "$(jq -r '."org.opencontainers.image.version"' <<< "$labels")" = "$RELEASE_TAG"
-            test "$(jq -r '."org.ornl-mdf.containers.candidate"' <<< "$labels")" = "$CANDIDATE_TAG"
-          done
-
-      - name: Promote complete private candidate batch
-        if: github.event_name == 'push' && (steps.release.outputs.status == 'new' || steps.release.outputs.status == 'resume')
-        id: promote
-        env:
-          CANDIDATE_TAG: ${{ steps.release.outputs.candidate_tag }}
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "started=true" >> "$GITHUB_OUTPUT"
-          for image in $TARGETS; do
-            candidate_repository="ghcr.io/ornl-mdf/containers-staging/${image}"
-            candidate_reference="${candidate_repository}:${CANDIDATE_TAG}"
-            public_reference="ghcr.io/ornl-mdf/containers/${image}:${RELEASE_TAG}"
-            labels="$(docker buildx imagetools inspect "$candidate_reference" --format '{{json .Config.Labels}}')"
-            test "$(jq -r '."org.opencontainers.image.revision"' <<< "$labels")" = "$GITHUB_SHA"
-            test "$(jq -r '."org.opencontainers.image.version"' <<< "$labels")" = "$RELEASE_TAG"
-            test "$(jq -r '."org.ornl-mdf.containers.candidate"' <<< "$labels")" = "$CANDIDATE_TAG"
-            candidate_digest="sha256:$(docker buildx imagetools inspect "$candidate_reference" --raw | sha256sum | cut -d' ' -f1)"
-            if docker buildx imagetools inspect "$public_reference" --raw >/dev/null 2>&1; then
-              public_digest="sha256:$(docker buildx imagetools inspect "$public_reference" --raw | sha256sum | cut -d' ' -f1)"
-              test "$public_digest" = "$candidate_digest"
-            else
-              docker buildx imagetools create --tag "$public_reference" "${candidate_repository}@${candidate_digest}"
-              public_digest="sha256:$(docker buildx imagetools inspect "$public_reference" --raw | sha256sum | cut -d' ' -f1)"
-              test "$public_digest" = "$candidate_digest"
-            fi
-          done
-
-      - name: Stage published release inventories
-        if: github.event_name == 'push'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          inventory_root="$RUNNER_TEMP/release-inventories"
-          for image in $TARGETS; do
-            reference="ghcr.io/ornl-mdf/containers/${image}:${RELEASE_TAG}"
-            image_root="${inventory_root}/${image}"
-            docker pull "$reference"
-            mkdir -p "${image_root}/${image}"
-            container="$(docker create "$reference")"
-            docker cp "${container}:/usr/share/ornl-mdf/inventory/${image}/." "${image_root}/${image}"
-            docker rm -f "$container" >/dev/null
-          done
-
-      - name: Generate release inventories and locks
-        if: github.event_name == 'push'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          inventory_root="$RUNNER_TEMP/release-inventories"
-          for image in $TARGETS; do
-            reference="ghcr.io/ornl-mdf/containers/${image}:${RELEASE_TAG}"
-            image_root="${inventory_root}/${image}"
-            digest="sha256:$(docker buildx imagetools inspect "$reference" --raw | sha256sum | cut -d' ' -f1)"
-            base_args=()
-            if [ "$image" = exaca ] || [ "$image" = thesis ]; then
-              base_args=(--base-inventory "${inventory_root}/ubuntu")
-            fi
-            python3 scripts/generate-container-docs.py \
-              --image "$image" \
-              --tag "$RELEASE_TAG" \
-              --digest "$digest" \
-              --inventory "$image_root" \
-              "${base_args[@]}"
-            if [ -f "${image_root}/${image}/spack.lock" ]; then
-              cp "${image_root}/${image}/spack.lock" "config/spack/${image}.lock"
-              echo "Captured locked Spack environment for ${image}"
-            fi
-          done
+          done < <(jq -c '.plans[]' <<< "$plans")
 
       - name: Commit generated release records
-        if: github.event_name == 'push'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -325,45 +250,7 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "docs: record container inventories for ${RELEASE_TAG}"
+          git commit -m "docs: record container inventories for ${GITHUB_SHA::7}"
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
-
-      - name: Remove private candidate images after release completion
-        if: github.event_name == 'push' && (steps.release.outputs.status == 'new' || steps.release.outputs.status == 'resume' || steps.release.outputs.status == 'complete')
-        env:
-          CANDIDATE_TAG: ${{ steps.release.outputs.candidate_tag }}
-          GH_TOKEN: ${{ github.token }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for image in $TARGETS; do
-            package="containers-staging/${image}"
-            encoded_package="$(jq -rn --arg value "$package" '$value | @uri')"
-            version_ids="$(gh api --paginate "/orgs/ORNL-MDF/packages/container/${encoded_package}/versions" \
-              --jq '.[] | select(.metadata.container.tags | index(env.CANDIDATE_TAG)) | .id')"
-            for version_id in $version_ids; do
-              gh api --method DELETE "/orgs/ORNL-MDF/packages/container/${encoded_package}/versions/${version_id}"
-            done
-          done
-
-      - name: Remove incomplete private candidates
-        if: failure() && github.event_name == 'push' && steps.release.outputs.status == 'new' && steps.promote.outputs.started != 'true'
-        env:
-          CANDIDATE_TAG: ${{ steps.release.outputs.candidate_tag }}
-          GH_TOKEN: ${{ github.token }}
-          TARGETS: ${{ needs.detect.outputs.targets }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for image in $TARGETS; do
-            package="containers-staging/${image}"
-            encoded_package="$(jq -rn --arg value "$package" '$value | @uri')"
-            version_ids="$(gh api --paginate "/orgs/ORNL-MDF/packages/container/${encoded_package}/versions" \
-              --jq '.[] | select(.metadata.container.tags | index(env.CANDIDATE_TAG)) | .id')"
-            for version_id in $version_ids; do
-              gh api --method DELETE "/orgs/ORNL-MDF/packages/container/${encoded_package}/versions/${version_id}"
-            done
-          done

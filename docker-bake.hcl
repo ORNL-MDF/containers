@@ -3,8 +3,32 @@ variable "REGISTRY" {
 }
 
 variable "RELEASE_TAG" {
-  # CI supplies an immutable UTC date, with a suffix for later daily releases.
+  # CI supplies a resolved version or tracker tag. Local builds use unreleased.
   default = "unreleased"
+}
+
+variable "SPACK_UBUNTU_MANIFEST" {
+  default = "ubuntu.yaml"
+}
+
+variable "SPACK_UBUNTU_LOCK" {
+  default = "ubuntu.lock"
+}
+
+variable "SPACK_EXACA_MANIFEST" {
+  default = "exaca.yaml"
+}
+
+variable "SPACK_EXACA_LOCK" {
+  default = "exaca.lock"
+}
+
+variable "SPACK_THESIS_MANIFEST" {
+  default = "thesis.yaml"
+}
+
+variable "SPACK_THESIS_LOCK" {
+  default = "thesis.lock"
 }
 
 variable "SPACK_UBUNTU_NOBLE_IMAGE" {
@@ -24,11 +48,6 @@ variable "GIT_REVISION" {
 }
 
 variable "RELEASE_CREATED" {
-  default = ""
-}
-
-variable "RELEASE_CANDIDATE" {
-  # CI records the private staging tag used to promote an immutable release.
   default = ""
 }
 
@@ -57,13 +76,13 @@ target "_common" {
   output = ["type=${OUTPUT_TYPE},push=${PUSH}"]
   args = {
     GIT_REVISION = "${GIT_REVISION}"
+    RELEASE_TAG = "${RELEASE_TAG}"
   }
   labels = {
     "org.opencontainers.image.source" = "https://github.com/ORNL-MDF/containers"
     "org.opencontainers.image.version" = "${RELEASE_TAG}"
     "org.opencontainers.image.revision" = "${GIT_REVISION}"
     "org.opencontainers.image.created" = "${RELEASE_CREATED}"
-    "org.ornl-mdf.containers.candidate" = "${RELEASE_CANDIDATE}"
   }
 }
 
@@ -72,6 +91,8 @@ target "ubuntu" {
   dockerfile = "images/ubuntu/Dockerfile"
   tags = ["${REGISTRY}/ubuntu:${RELEASE_TAG}"]
   args = {
+    SPACK_UBUNTU_MANIFEST = "${SPACK_UBUNTU_MANIFEST}"
+    SPACK_UBUNTU_LOCK = "${SPACK_UBUNTU_LOCK}"
     SPACK_UBUNTU_NOBLE_IMAGE = "${SPACK_UBUNTU_NOBLE_IMAGE}"
   }
   labels = {
@@ -104,6 +125,10 @@ target "exaca" {
   labels = {
     "org.opencontainers.image.description" = "ORNL-MDF ExaCA simulation environment. Full inventory: repository docs/containers."
   }
+  args = {
+    SPACK_EXACA_MANIFEST = "${SPACK_EXACA_MANIFEST}"
+    SPACK_EXACA_LOCK = "${SPACK_EXACA_LOCK}"
+  }
 }
 
 target "thesis" {
@@ -115,5 +140,9 @@ target "thesis" {
   }
   labels = {
     "org.opencontainers.image.description" = "ORNL-MDF 3DThesis simulation environment. Full inventory: repository docs/containers."
+  }
+  args = {
+    SPACK_THESIS_MANIFEST = "${SPACK_THESIS_MANIFEST}"
+    SPACK_THESIS_LOCK = "${SPACK_THESIS_LOCK}"
   }
 }

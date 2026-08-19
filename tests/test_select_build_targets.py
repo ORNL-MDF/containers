@@ -45,6 +45,12 @@ class SelectBuildTargetsTests(unittest.TestCase):
             (["exaca", "thesis", "ubuntu"], ["exaca", "thesis", "ubuntu"]),
         )
 
+    def test_tracker_manifest_change_selects_package_without_refreshing_lock(self):
+        self.assertEqual(
+            select_targets(BAKE, ["config/spack/exaca-main.yaml"]),
+            (["exaca", "ubuntu"], []),
+        )
+
     def test_image_change_selects_package(self):
         self.assertEqual(
             select_targets(BAKE, ["images/thesis/Dockerfile"]),
@@ -54,6 +60,12 @@ class SelectBuildTargetsTests(unittest.TestCase):
     def test_bake_change_includes_all_public_packages(self):
         self.assertEqual(
             select_targets(BAKE, ["docker-bake.hcl"]),
+            (["exaca", "thesis", "ubuntu"], []),
+        )
+
+    def test_image_tag_config_change_includes_all_public_packages(self):
+        self.assertEqual(
+            select_targets(BAKE, ["config/image-tags.json"]),
             (["exaca", "thesis", "ubuntu"], []),
         )
 
