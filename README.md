@@ -210,3 +210,7 @@ all of its dependent solver images and lockfiles. Changes to the shared
 `config/spack/ubuntu.lock` is a build input when present, just like the solver
 lockfiles. CI removes it only when the shared environment manifests require a new
 concrete solution. Monthly tracker rebuilds do not overwrite these release lockfiles.
+
+CI completes every selected image build and smoke test before it pushes any image
+tag. Pull-request builds use read-only repository credentials; package publishing
+and generated-record commits run only for trusted `main` pushes and scheduled runs.

@@ -14,6 +14,12 @@ class DockerfileTests(unittest.TestCase):
             dockerfile,
         )
 
+    def test_additivefoam_fetches_tag_references_before_describing_the_revision(self):
+        dockerfile = (ROOT / "images" / "additivefoam" / "Dockerfile").read_text()
+        self.assertIn('git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}";', dockerfile)
+        self.assertIn('git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin;', dockerfile)
+        self.assertNotIn('fetch --depth 1 origin "${ADDITIVEFOAM_REF}"', dockerfile)
+
 
 if __name__ == "__main__":
     unittest.main()

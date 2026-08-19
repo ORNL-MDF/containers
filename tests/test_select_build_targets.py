@@ -51,6 +51,12 @@ class SelectBuildTargetsTests(unittest.TestCase):
             (["exaca", "ubuntu"], []),
         )
 
+    def test_lockfile_change_selects_package_without_replacing_the_lock(self):
+        self.assertEqual(
+            select_targets(BAKE, ["config/spack/exaca.lock"]),
+            (["exaca", "ubuntu"], []),
+        )
+
     def test_image_change_selects_package(self):
         self.assertEqual(
             select_targets(BAKE, ["images/thesis/Dockerfile"]),

@@ -15,8 +15,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   validate:
@@ -121,8 +120,47 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Refresh changed Spack locks
+        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
+        env:
+          LOCKS: ${{ needs.detect.outputs.refresh_locks }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in $LOCKS; do
+            rm -f "config/spack/${image}.lock"
+          done
+
+      - name: Build and test images
+        env:
+          ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
+          GIT_REVISION: ${{ github.sha }}
+          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
+          TARGETS: ${{ needs.detect.outputs.targets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/release-images.sh
+
+  publish:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - detect
+    if: github.event_name != 'pull_request' && needs.detect.outputs.should_build == 'true'
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -143,103 +181,13 @@ jobs:
       - name: Build, test, publish, and document images
         env:
           ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
-          EVENT_NAME: ${{ github.event_name }}
           GIT_REVISION: ${{ github.sha }}
+          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
-        run: |
-          set -euo pipefail
-
-          release_created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          resolve_args=(python3 scripts/resolve_image_tags.py --additivefoam-ref "$ADDITIVEFOAM_REF")
-          if [ "$EVENT_NAME" = "schedule" ]; then
-            resolve_args+=(--mode tracker)
-          else
-            resolve_args+=(--mode version)
-          fi
-          for target in $TARGETS; do
-            resolve_args+=(--target "$target")
-          done
-          plans="$("${resolve_args[@]}")"
-          echo "$plans"
-
-          while IFS= read -r plan; do
-            image="$(jq -r '.image' <<< "$plan")"
-            tag="$(jq -r '.tag' <<< "$plan")"
-            kind="$(jq -r '.kind' <<< "$plan")"
-            base_tag="$(jq -r '.base_tag // empty' <<< "$plan")"
-            lockfile="$(jq -r '.lockfile // empty' <<< "$plan")"
-            build_args_file="$(mktemp)"
-            jq -r '.build_args | to_entries[] | "\(.key)=\(.value)"' <<< "$plan" > "$build_args_file"
-
-            build_cmd=(docker buildx bake "$image")
-            while IFS='=' read -r key value; do
-              [ -n "$key" ] || continue
-              build_cmd+=(--set "${image}.args.${key}=${value}")
-            done < "$build_args_file"
-
-            export OUTPUT_TYPE=docker
-            export PUSH=false
-            export RELEASE_TAG="$tag"
-            export RELEASE_CREATED="$release_created"
-            export GIT_REVISION
-            echo "Building ${image}:${tag} (${kind})"
-            "${build_cmd[@]}"
-
-            REGISTRY=ghcr.io/ornl-mdf/containers RELEASE_TAG="$tag" scripts/container-smoke-tests.sh "$image"
-
-            if [ "$EVENT_NAME" != "pull_request" ]; then
-              reference="ghcr.io/ornl-mdf/containers/${image}:${tag}"
-              docker image push "$reference"
-              digest="sha256:$(docker buildx imagetools inspect "$reference" --raw | sha256sum | cut -d' ' -f1)"
-
-              inventory_root="$RUNNER_TEMP/release-inventories/${image}"
-              mkdir -p "${inventory_root}/${image}"
-              container="$(docker create "$reference")"
-              docker cp "${container}:/usr/share/ornl-mdf/inventory/${image}/." "${inventory_root}/${image}"
-              docker rm -f "$container" >/dev/null
-
-              base_args=()
-              if [ -n "$base_tag" ]; then
-                base_reference="ghcr.io/ornl-mdf/containers/ubuntu:${base_tag}"
-                base_root="$RUNNER_TEMP/release-inventories/ubuntu-${base_tag}"
-                mkdir -p "${base_root}/ubuntu"
-                base_container="$(docker create "$base_reference")"
-                docker cp "${base_container}:/usr/share/ornl-mdf/inventory/ubuntu/." "${base_root}/ubuntu"
-                docker rm -f "$base_container" >/dev/null
-                base_args=(--base-inventory "$base_root" --base-tag "$base_tag")
-              fi
-
-              python3 scripts/generate-container-docs.py \
-                --image "$image" \
-                --tag "$tag" \
-                --digest "$digest" \
-                --inventory "$inventory_root" \
-                --output-root docs/containers \
-                "${base_args[@]}"
-
-              if [ "$kind" = "version" ]; then
-                snapshot_tag="${tag}-$(date -u +%Y%m%d)-${GIT_REVISION::7}"
-              else
-                snapshot_tag="${tag}-$(date -u +%Y-%m)"
-              fi
-              python3 scripts/generate-container-docs.py \
-                --image "$image" \
-                --tag "$snapshot_tag" \
-                --published-tag "$tag" \
-                --digest "$digest" \
-                --inventory "$inventory_root" \
-                --output-root docs/containers \
-                "${base_args[@]}"
-
-              if [ -n "$lockfile" ] && [ -f "${inventory_root}/${image}/spack.lock" ]; then
-                cp "${inventory_root}/${image}/spack.lock" "config/spack/${image}.lock"
-              fi
-            fi
-          done < <(jq -c '.plans[]' <<< "$plans")
+        run: scripts/release-images.sh --publish
 
       - name: Commit generated release records
-        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail

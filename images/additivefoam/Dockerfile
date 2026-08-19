@@ -23,7 +23,8 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     git init "${ADDITIVEFOAM_DIR}"; \
     git -C "${ADDITIVEFOAM_DIR}" remote add origin https://github.com/ORNL/AdditiveFOAM.git; \
-    git -C "${ADDITIVEFOAM_DIR}" fetch --depth 1 origin "${ADDITIVEFOAM_REF}"; \
+    git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}"; \
+    git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin; \
     git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD; \
     additivefoam_revision="$(git -C "${ADDITIVEFOAM_DIR}" rev-parse HEAD)"; \
     additivefoam_version="$(git -C "${ADDITIVEFOAM_DIR}" describe --tags --abbrev=0)"; \

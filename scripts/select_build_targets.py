@@ -83,6 +83,13 @@ def select_targets(bake: dict[str, Any], changed_files: list[str]) -> tuple[list
             elif tracker_package in package_names and tracker_package != "base":
                 selected.add(tracker_package)
 
+        # Generated lockfiles are also direct Docker build inputs. Do not refresh
+        # one that was deliberately changed; validate and publish that exact lock.
+        if len(parts) == 3 and parts[:2] == ("config", "spack") and path.endswith(".lock"):
+            package = Path(parts[2]).stem
+            if package in package_names:
+                selected.add(package)
+
     dependents = reverse_dependencies(packages)
     pending = list(selected)
     while pending:
