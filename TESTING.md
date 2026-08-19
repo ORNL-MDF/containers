@@ -69,6 +69,12 @@ Confirm the rendered output has the requested version tag and OCI `source`,
 `version`, `revision`, and `created` labels. For solver tracker changes, also
 validate representative manifest overrides, for example
 `SPACK_EXACA_MANIFEST=exaca-main.yaml SPACK_EXACA_LOCK= docker buildx bake --print exaca`.
+For AdditiveFOAM tracker changes, confirm the tracker plan overrides both the
+AdditiveFOAM ref and the OpenFOAM base:
+
+```sh
+python3 scripts/resolve_image_tags.py --mode tracker --target additivefoam
+```
 
 ## Change-Specific Coverage
 

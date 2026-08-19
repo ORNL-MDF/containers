@@ -18,7 +18,18 @@ class DockerfileTests(unittest.TestCase):
         dockerfile = (ROOT / "images" / "additivefoam" / "Dockerfile").read_text()
         self.assertIn('git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}";', dockerfile)
         self.assertIn('git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin;', dockerfile)
+        self.assertLess(
+            dockerfile.index('git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD;'),
+            dockerfile.index('git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin;'),
+        )
         self.assertNotIn('fetch --depth 1 origin "${ADDITIVEFOAM_REF}"', dockerfile)
+
+    def test_additivefoam_sources_supported_openfoam_versions(self):
+        dockerfile = (ROOT / "images" / "additivefoam" / "Dockerfile").read_text()
+        self.assertIn("/opt/openfoam14/etc/bashrc", dockerfile)
+        self.assertIn("/usr/lib/openfoam/openfoam14/etc/bashrc", dockerfile)
+        self.assertIn("/opt/openfoam10/etc/bashrc", dockerfile)
+        self.assertIn("/usr/lib/openfoam/openfoam10/etc/bashrc", dockerfile)
 
 
 if __name__ == "__main__":

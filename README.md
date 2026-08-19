@@ -48,8 +48,8 @@ has a specific compatibility constraint.
 `exaca:<version-tag>` and `thesis:<version-tag>` reuse the `ubuntu` container as their build base.
 
 `additivefoam:<version-tag>` repackages the OpenFOAM Foundation v10 image and layers
-an upstream AdditiveFOAM release such as `1.1.0` on top of it. CI also publishes
-`additivefoam:main` as a moving monthly tracker.
+an upstream AdditiveFOAM release such as `1.2.0` on top of it. CI also publishes
+`additivefoam:main` as a moving monthly tracker using an OpenFOAM 14 base.
 
 All repo-owned images default to the non-root `mdf` runtime user. Build steps
 that need elevated privileges still run as `root` inside the Dockerfile, but

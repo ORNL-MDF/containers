@@ -55,7 +55,8 @@
         {
           "tag": "main",
           "build_args": {
-            "ADDITIVEFOAM_REF": "main"
+            "ADDITIVEFOAM_REF": "main",
+            "OPENFOAM_IMAGE": "microfluidica/openfoam:14@sha256:efba53ae22dc5154114a9dd346c979b3cd7f3e20ebed90e399230c02592aecbf"
           }
         }
       ]

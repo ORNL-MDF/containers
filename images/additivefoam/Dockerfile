@@ -24,11 +24,11 @@ RUN set -eux; \
     git init "${ADDITIVEFOAM_DIR}"; \
     git -C "${ADDITIVEFOAM_DIR}" remote add origin https://github.com/ORNL/AdditiveFOAM.git; \
     git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}"; \
-    git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin; \
     git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD; \
+    git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin; \
     additivefoam_revision="$(git -C "${ADDITIVEFOAM_DIR}" rev-parse HEAD)"; \
     additivefoam_version="$(git -C "${ADDITIVEFOAM_DIR}" describe --tags --abbrev=0)"; \
-    for candidate in /opt/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam*/etc/bashrc; do \
+    for candidate in /opt/openfoam14/etc/bashrc /usr/lib/openfoam/openfoam14/etc/bashrc /opt/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam*/etc/bashrc; do \
       if [ -f "$candidate" ]; then \
         set +u; \
         . "$candidate" || true; \

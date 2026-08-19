@@ -75,6 +75,10 @@ class ResolveImageTagsTests(unittest.TestCase):
         self.assertEqual(len(plans), 1)
         self.assertEqual(plans[0].tag, "main")
         self.assertEqual(plans[0].build_args["ADDITIVEFOAM_REF"], "main")
+        self.assertEqual(
+            plans[0].build_args["OPENFOAM_IMAGE"],
+            "microfluidica/openfoam:14@sha256:efba53ae22dc5154114a9dd346c979b3cd7f3e20ebed90e399230c02592aecbf",
+        )
 
     def test_thesis_tracker_uses_master_manifest(self):
         config = load_config()
