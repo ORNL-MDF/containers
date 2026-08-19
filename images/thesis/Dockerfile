@@ -8,7 +8,8 @@ ARG SPACK_THESIS_LOCK=thesis.lock
 
 COPY config/spack/ /tmp/spack-config/
 
-RUN cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
+RUN mkdir -p /opt/spack-environment \
+&&  cp /tmp/spack-config/base.yaml /opt/spack-environment/base.yaml \
 &&  cp "/tmp/spack-config/${SPACK_THESIS_MANIFEST}" /opt/spack-environment/spack.yaml \
 &&  rm -f /opt/spack-environment/spack.lock \
 &&  if [ -n "${SPACK_THESIS_LOCK}" ] && [ -f "/tmp/spack-config/${SPACK_THESIS_LOCK}" ]; then cp "/tmp/spack-config/${SPACK_THESIS_LOCK}" /opt/spack-environment/spack.lock; fi \

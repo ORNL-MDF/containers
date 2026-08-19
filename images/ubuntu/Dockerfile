@@ -38,7 +38,7 @@ RUN set -eux; \
         useradd --create-home --uid "${MDF_UID}" --gid "${MDF_USER}" --shell /bin/bash "${MDF_USER}"; \
       fi; \
     fi; \
-    mkdir -p /opt/software /opt/views "${MDF_WORKDIR}"; \
+    mkdir -p /opt/software /opt/views /opt/spack-environment "${MDF_WORKDIR}"; \
     home_dir="$(getent passwd "${MDF_USER}" | cut -d: -f6)"; \
     if [ -z "${home_dir}" ]; then \
       echo "Unable to resolve home directory for ${MDF_USER}" >&2; \
