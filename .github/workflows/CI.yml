@@ -89,6 +89,23 @@ jobs:
           changed_files="$(mktemp)"
           bake_json="$(mktemp)"
           git diff --name-only "$base_sha" "$head_sha" > "$changed_files"
+
+          # Release-record PRs contain only generated files. They must not
+          # trigger another image publication when the PR is merged.
+          generated_only=true
+          while IFS= read -r path; do
+            case "$path" in
+              docs/containers/*|config/spack/*.lock) ;;
+              *) generated_only=false; break ;;
+            esac
+          done < "$changed_files"
+          if [ -s "$changed_files" ] && [ "$generated_only" = true ]; then
+            echo "refresh_locks=" >> "$GITHUB_OUTPUT"
+            echo "targets=" >> "$GITHUB_OUTPUT"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           docker buildx bake --print > "$bake_json"
           selection="$(python3 scripts/select_build_targets.py \
             --bake-json "$bake_json" \
@@ -151,6 +168,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -188,6 +206,7 @@ jobs:
         run: scripts/release-images.sh --publish
 
       - name: Commit generated release records
+        id: release_records
         shell: bash
         run: |
           set -euo pipefail
@@ -196,9 +215,49 @@ jobs:
           git add docs/containers
           git add config/spack/*.lock 2>/dev/null || true
           if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          branch="automation/container-inventory-${GITHUB_RUN_ID}"
+          git switch -C "$branch"
           git commit -m "docs: record container inventories for ${GITHUB_SHA::7}"
           git fetch origin main
           git rebase origin/main
-          git push origin HEAD:main
+          if git diff --quiet origin/main HEAD; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}" || true
+          git push --force-with-lease origin "HEAD:${branch}"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create release records pull request
+        if: steps.release_records.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ steps.release_records.outputs.branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="docs: record container inventories for ${GITHUB_SHA::7}"
+          existing_pr="$(gh pr list \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --state all \
+            --json number,state,mergedAt \
+            --jq '.[0] | [.number, .state, (.mergedAt // "")] | @tsv')"
+          if [ -n "$existing_pr" ]; then
+            IFS=$'\t' read -r pr_number pr_state pr_merged_at <<< "$existing_pr"
+            if [ "$pr_state" = CLOSED ] && [ -z "$pr_merged_at" ]; then
+              gh pr reopen "$pr_number"
+            else
+              echo "Release records PR #${pr_number} already exists (${pr_state})."
+            fi
+            exit 0
+          fi
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "$title" \
+            --body "Generated automatically by the publish workflow. This PR records container inventory documentation and updates generated Spack lockfiles."

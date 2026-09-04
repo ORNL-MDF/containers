@@ -166,7 +166,9 @@ The same build and smoke tests run in CI for every affected image before a PR ca
 `main`. This is intended to ensure that containers build successfully on the GitHub runners before
 they are published. The actual publishing does not happen until the PR is merged into main.
 Package publishing and generated-record commits run only for trusted `main`
-pushes and scheduled runs.
+pushes and scheduled runs. Generated inventory pages and Spack lock updates are
+pushed to a run-specific automation branch and proposed in a pull request; the
+generated-only PR is excluded from triggering another publication cycle.
 
 ### CI Rebuild Policy
 
