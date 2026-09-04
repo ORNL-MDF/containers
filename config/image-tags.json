@@ -1,0 +1,65 @@
+{
+  "images": {
+    "ubuntu": {
+      "version_source": {
+        "type": "spack-composite",
+        "manifest": "config/spack/ubuntu.yaml"
+      }
+    },
+    "exaca": {
+      "version_source": {
+        "type": "spack-top-spec",
+        "manifest": "config/spack/exaca.yaml"
+      },
+      "build": {
+        "manifest_arg": "SPACK_EXACA_MANIFEST",
+        "lock_arg": "SPACK_EXACA_LOCK",
+        "manifest_value": "exaca.yaml",
+        "lock_value": "exaca.lock"
+      },
+      "trackers": [
+        {
+          "tag": "main",
+          "manifest": "config/spack/exaca-main.yaml",
+          "manifest_value": "exaca-main.yaml",
+          "lock_value": ""
+        }
+      ]
+    },
+    "thesis": {
+      "version_source": {
+        "type": "spack-top-spec",
+        "manifest": "config/spack/thesis.yaml"
+      },
+      "build": {
+        "manifest_arg": "SPACK_THESIS_MANIFEST",
+        "lock_arg": "SPACK_THESIS_LOCK",
+        "manifest_value": "thesis.yaml",
+        "lock_value": "thesis.lock"
+      },
+      "trackers": [
+        {
+          "tag": "master",
+          "manifest": "config/spack/thesis-master.yaml",
+          "manifest_value": "thesis-master.yaml",
+          "lock_value": ""
+        }
+      ]
+    },
+    "additivefoam": {
+      "version_source": {
+        "type": "git-release-tag",
+        "remote": "https://github.com/ORNL/AdditiveFOAM.git"
+      },
+      "trackers": [
+        {
+          "tag": "main",
+          "build_args": {
+            "ADDITIVEFOAM_REF": "main",
+            "OPENFOAM_IMAGE": "microfluidica/openfoam:14@sha256:efba53ae22dc5154114a9dd346c979b3cd7f3e20ebed90e399230c02592aecbf"
+          }
+        }
+      ]
+    }
+  }
+}

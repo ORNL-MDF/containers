@@ -1,5 +1,0 @@
-spack:
-  specs:
-  # Myna apps (can eventually be replaced with "myna +exaca +additivefoam")
-  - exaca@master
-  - additivefoam@main

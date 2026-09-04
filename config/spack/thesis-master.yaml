@@ -1,0 +1,5 @@
+spack:
+  include:
+  - base.yaml
+  specs:
+  - thesis@master+mpi ^mpich@4.3.0

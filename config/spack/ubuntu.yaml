@@ -1,0 +1,6 @@
+spack:
+  include:
+  - base.yaml
+  specs:
+  - mpich@4.3.0
+  - kokkos@4.7.04

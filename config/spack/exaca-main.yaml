@@ -1,0 +1,5 @@
+spack:
+  include:
+  - base.yaml
+  specs:
+  - exaca@main ^mpich@4.3.0 ^kokkos@4.7.04

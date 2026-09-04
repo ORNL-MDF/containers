@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Render a repository catalog from inventory files embedded in a container."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+
+def read_metadata(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
+
+
+def extract_inventory(image: str) -> Path:
+    tempdir = Path(tempfile.mkdtemp(prefix="container-inventory-"))
+    container = subprocess.check_output(["docker", "create", image], text=True).strip()
+    try:
+        subprocess.run(
+            ["docker", "cp", f"{container}:/usr/share/ornl-mdf/inventory", str(tempdir)],
+            check=True,
+        )
+    finally:
+        subprocess.run(["docker", "rm", "-f", container], check=True, stdout=subprocess.DEVNULL)
+    return tempdir / "inventory"
+
+
+def software_rows(inventory: Path) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for apt_file in sorted(inventory.glob("*/apt.tsv")):
+        rows.extend(tuple(line.split("\t", 1)) for line in apt_file.read_text().splitlines() if "\t" in line)
+    for spack_file in sorted(inventory.glob("*/spack.json")):
+        try:
+            packages = json.loads(spack_file.read_text())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(packages, dict):
+            packages = packages.get("specs", [])
+        if not isinstance(packages, list):
+            continue
+        for package in packages:
+            name = package.get("name", "unknown")
+            version = package.get("version", "unknown")
+            rows.append((f"spack:{name}", str(version)))
+    return sorted(set(rows))
+
+
+def render(
+    image: str,
+    page_tag: str,
+    published_tag: str,
+    digest: str,
+    inventory: Path,
+    base_inventory: Path | None = None,
+    base_tag: str | None = None,
+) -> str:
+    metadata = {}
+    for metadata_file in sorted(inventory.glob("*/metadata.env")):
+        metadata.update(read_metadata(metadata_file))
+    lines = [
+        f"# {image}:{page_tag}",
+        "",
+        f"- Published tag: `ghcr.io/ornl-mdf/containers/{image}:{published_tag}`",
+        f"- Digest: `{digest}`",
+        f"- Digest reference: `ghcr.io/ornl-mdf/containers/{image}@{digest}`",
+        f"- Repository revision: `{metadata.get('repository_revision', 'not recorded')}`",
+        "",
+        "## Build Inputs",
+        "",
+    ]
+    if page_tag != published_tag:
+        lines.append(f"- Snapshot of tag: `{published_tag}`")
+    for key in sorted(key for key in metadata if key not in {"image", "repository_revision"}):
+        lines.append(f"- {key.replace('_', ' ')}: `{metadata[key]}`")
+    for lock_file in sorted(inventory.glob("*/spack.lock")):
+        lock_digest = hashlib.sha256(lock_file.read_bytes()).hexdigest()
+        lines.append(f"- {lock_file.parent.name} Spack lock SHA-256: `{lock_digest}`")
+    rows = software_rows(inventory)
+    if base_inventory is not None:
+        base_rows = set(software_rows(base_inventory))
+        rows = [row for row in rows if row not in base_rows]
+        lines.extend(
+            [
+                "",
+                f"- Shared packages and versions: [ubuntu:{base_tag or published_tag}](../ubuntu/{base_tag or published_tag}.md)",
+            ]
+        )
+    lines.extend(["", "## Installed Software", "", "| Package | Version |", "| --- | --- |"])
+    lines.extend(f"| `{name}` | `{version}` |" for name, version in rows)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def update_index(root: Path) -> None:
+    entries = sorted(root.glob("*/*.md"))
+    lines = [
+        "# Container Software Inventory",
+        "",
+        "Generated from inventory artifacts embedded in published images.",
+        "Canonical tag pages show the latest digest for each public tag.",
+        "Snapshot pages preserve prior published digests for reproducible references.",
+        "",
+    ]
+    for entry in entries:
+        if entry.name == "README.md":
+            continue
+        lines.append(f"- [{entry.parent.name}:{entry.stem}]({entry.relative_to(root).as_posix()})")
+    lines.append("")
+    (root / "README.md").write_text("\n".join(lines))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image", required=True)
+    parser.add_argument("--tag", required=True)
+    parser.add_argument("--published-tag")
+    parser.add_argument("--digest", required=True)
+    parser.add_argument("--output-root", type=Path, default=Path("docs/containers"))
+    parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--base-tag")
+    base_group = parser.add_mutually_exclusive_group()
+    base_group.add_argument("--base-inventory", type=Path)
+    base_group.add_argument("--base-image")
+    args = parser.parse_args()
+
+    published_tag = args.published_tag or args.tag
+    inventory = args.inventory or extract_inventory(f"ghcr.io/ornl-mdf/containers/{args.image}:{published_tag}")
+    base_inventory = args.base_inventory
+    if args.base_image:
+        base_inventory = extract_inventory(args.base_image)
+    output_dir = args.output_root / args.image
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / f"{args.tag}.md").write_text(
+        render(args.image, args.tag, published_tag, args.digest, inventory, base_inventory, args.base_tag)
+    )
+    update_index(args.output_root)
+    if args.inventory is None:
+        shutil.rmtree(inventory.parent)
+    if args.base_image:
+        shutil.rmtree(base_inventory.parent)
+
+
+if __name__ == "__main__":
+    main()
