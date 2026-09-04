@@ -9,6 +9,7 @@ on:
       - main
   schedule:
     - cron: "0 6 1 * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.event_name }}-${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -35,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = schedule ]; then
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then
             BASE_SHA="$GITHUB_SHA"
           elif [[ "$BASE_SHA" =~ ^0+$ ]]; then
             BASE_SHA="$(git rev-list --max-parents=0 "$GITHUB_SHA")"
@@ -64,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = schedule ]; then
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then
             targets="$(python3 scripts/resolve_image_tags.py --mode tracker-targets | jq -r '.targets | join(" ")')"
             echo "refresh_locks=" >> "$GITHUB_OUTPUT"
             echo "targets=${targets}" >> "$GITHUB_OUTPUT"
@@ -89,6 +90,23 @@ jobs:
           changed_files="$(mktemp)"
           bake_json="$(mktemp)"
           git diff --name-only "$base_sha" "$head_sha" > "$changed_files"
+
+          # Release-record PRs contain only generated files. They must not
+          # trigger another image publication when the PR is merged.
+          generated_only=true
+          while IFS= read -r path; do
+            case "$path" in
+              docs/containers/*|config/spack/*.lock) ;;
+              *) generated_only=false; break ;;
+            esac
+          done < "$changed_files"
+          if [ -s "$changed_files" ] && [ "$generated_only" = true ]; then
+            echo "refresh_locks=" >> "$GITHUB_OUTPUT"
+            echo "targets=" >> "$GITHUB_OUTPUT"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           docker buildx bake --print > "$bake_json"
           selection="$(python3 scripts/select_build_targets.py \
             --bake-json "$bake_json" \
@@ -110,7 +128,7 @@ jobs:
     needs:
       - validate
       - detect
-    if: github.event_name == 'schedule' || needs.detect.outputs.should_build == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.detect.outputs.should_build == 'true'
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -121,7 +139,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Refresh changed Spack locks
-        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && needs.detect.outputs.refresh_locks != ''
         env:
           LOCKS: ${{ needs.detect.outputs.refresh_locks }}
         shell: bash
@@ -135,7 +153,7 @@ jobs:
         env:
           ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
           GIT_REVISION: ${{ github.sha }}
-          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
+          RELEASE_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'tracker' || 'version' }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
         run: |
@@ -151,6 +169,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -168,7 +187,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Refresh changed Spack locks
-        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && needs.detect.outputs.refresh_locks != ''
         env:
           LOCKS: ${{ needs.detect.outputs.refresh_locks }}
         shell: bash
@@ -182,12 +201,13 @@ jobs:
         env:
           ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
           GIT_REVISION: ${{ github.sha }}
-          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
+          RELEASE_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'tracker' || 'version' }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
         run: scripts/release-images.sh --publish
 
       - name: Commit generated release records
+        id: release_records
         shell: bash
         run: |
           set -euo pipefail
@@ -196,9 +216,49 @@ jobs:
           git add docs/containers
           git add config/spack/*.lock 2>/dev/null || true
           if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          branch="automation/container-inventory-${GITHUB_RUN_ID}"
+          git switch -C "$branch"
           git commit -m "docs: record container inventories for ${GITHUB_SHA::7}"
           git fetch origin main
           git rebase origin/main
-          git push origin HEAD:main
+          if git diff --quiet origin/main HEAD; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}" || true
+          git push --force-with-lease origin "HEAD:${branch}"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create release records pull request
+        if: steps.release_records.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ steps.release_records.outputs.branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="docs: record container inventories for ${GITHUB_SHA::7}"
+          existing_pr="$(gh pr list \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --state all \
+            --json number,state,mergedAt \
+            --jq '.[0] | [.number, .state, (.mergedAt // "")] | @tsv')"
+          if [ -n "$existing_pr" ]; then
+            IFS=$'\t' read -r pr_number pr_state pr_merged_at <<< "$existing_pr"
+            if [ "$pr_state" = CLOSED ] && [ -z "$pr_merged_at" ]; then
+              gh pr reopen "$pr_number"
+            else
+              echo "Release records PR #${pr_number} already exists (${pr_state})."
+            fi
+            exit 0
+          fi
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "$title" \
+            --body "Generated automatically by the publish workflow. This PR records container inventory documentation and updates generated Spack lockfiles."
