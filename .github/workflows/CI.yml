@@ -9,6 +9,7 @@ on:
       - main
   schedule:
     - cron: "0 6 1 * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.event_name }}-${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -35,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = schedule ]; then
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then
             BASE_SHA="$GITHUB_SHA"
           elif [[ "$BASE_SHA" =~ ^0+$ ]]; then
             BASE_SHA="$(git rev-list --max-parents=0 "$GITHUB_SHA")"
@@ -64,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = schedule ]; then
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then
             targets="$(python3 scripts/resolve_image_tags.py --mode tracker-targets | jq -r '.targets | join(" ")')"
             echo "refresh_locks=" >> "$GITHUB_OUTPUT"
             echo "targets=${targets}" >> "$GITHUB_OUTPUT"
@@ -127,7 +128,7 @@ jobs:
     needs:
       - validate
       - detect
-    if: github.event_name == 'schedule' || needs.detect.outputs.should_build == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.detect.outputs.should_build == 'true'
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -138,7 +139,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Refresh changed Spack locks
-        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && needs.detect.outputs.refresh_locks != ''
         env:
           LOCKS: ${{ needs.detect.outputs.refresh_locks }}
         shell: bash
@@ -152,7 +153,7 @@ jobs:
         env:
           ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
           GIT_REVISION: ${{ github.sha }}
-          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
+          RELEASE_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'tracker' || 'version' }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
         run: |
@@ -186,7 +187,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Refresh changed Spack locks
-        if: github.event_name != 'schedule' && needs.detect.outputs.refresh_locks != ''
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && needs.detect.outputs.refresh_locks != ''
         env:
           LOCKS: ${{ needs.detect.outputs.refresh_locks }}
         shell: bash
@@ -200,7 +201,7 @@ jobs:
         env:
           ADDITIVEFOAM_REF: b8f6d48c53555c303fa8186c895aee5712b6ea02
           GIT_REVISION: ${{ github.sha }}
-          RELEASE_MODE: ${{ github.event_name == 'schedule' && 'tracker' || 'version' }}
+          RELEASE_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'tracker' || 'version' }}
           TARGETS: ${{ needs.detect.outputs.targets }}
         shell: bash
         run: scripts/release-images.sh --publish
