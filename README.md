@@ -24,7 +24,7 @@ GCC, MPICH, and Kokkos toolchain used by the solver images, together with their
 Spack activation. ExaCA and Thesis reuse this installed store and add only their
 solver-specific packages. This is intended to be the base image for other
 Spack-derived containers; use a different base only when a software environment
-has a specific compatibility constraint. 
+has a specific compatibility constraint.
 
 Spack-based installations, e.g., `exaca:<version-tag>` and `thesis:<version-tag>`,
 reuse the `ubuntu` container as their build base, which speeds container build time
