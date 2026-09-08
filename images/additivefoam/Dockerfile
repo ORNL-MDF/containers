@@ -21,7 +21,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ca-certificates git; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*; \
-    git init --initial-branch=main "${ADDITIVEFOAM_DIR}"; \
+    git init "${ADDITIVEFOAM_DIR}"; \
     git -C "${ADDITIVEFOAM_DIR}" remote add origin https://github.com/ORNL/AdditiveFOAM.git; \
     git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}"; \
     git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD; \
