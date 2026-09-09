@@ -18,7 +18,7 @@ ENV ADDITIVEFOAM_DIR=/opt/AdditiveFOAM
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends git; \
+    apt-get install -y --no-install-recommends ca-certificates git; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*; \
     git init "${ADDITIVEFOAM_DIR}"; \
