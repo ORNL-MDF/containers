@@ -31,6 +31,16 @@ class DockerfileTests(unittest.TestCase):
         self.assertIn("/opt/openfoam10/etc/bashrc", dockerfile)
         self.assertIn("/usr/lib/openfoam/openfoam10/etc/bashrc", dockerfile)
 
+    def test_additivefoam_uses_an_owned_openfoam_entrypoint(self):
+        dockerfile = (ROOT / "images" / "additivefoam" / "Dockerfile").read_text()
+        self.assertNotIn("mv /root/OpenFOAM", dockerfile)
+        self.assertIn("USER mdf\n\nRUN set -eux;", dockerfile)
+        self.assertLess(dockerfile.index("USER mdf\n\nRUN set -eux;"), dockerfile.index("./Allwmake"))
+        self.assertIn(". /openfoam/profile.rc", dockerfile)
+        self.assertIn('if [ -f "${ADDITIVEFOAM_DIR}/etc/bashrc" ]; then', dockerfile)
+        self.assertLess(dockerfile.index(". /openfoam/profile.rc"), dockerfile.index('if [ -f "${ADDITIVEFOAM_DIR}/etc/bashrc" ]; then'))
+        self.assertIn('ENTRYPOINT ["/entrypoint.sh"]', dockerfile)
+
 
 if __name__ == "__main__":
     unittest.main()

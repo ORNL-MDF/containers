@@ -29,12 +29,6 @@ Pass one or more target names to limit the test run, for example:
 scripts/container-smoke-tests.sh exaca thesis
 ```
 
-The script checks the non-root Ubuntu runtime environment, the AdditiveFOAM
-tutorial completion marker, and the serial and MPI error paths of ExaCA and
-3DThesis. It expects the solver programs to reject a missing input file; ExaCA
-must also print its version banner. CI runs the same script against every
-affected image after it builds and before a push can publish it.
-
 ## Inspect Resolved Tags
 
 To quickly test which version and tracker tags the current configuration would
