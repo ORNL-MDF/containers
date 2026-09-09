@@ -26,19 +26,6 @@ RUN set -eux; \
     git -C "${ADDITIVEFOAM_DIR}" fetch origin "${ADDITIVEFOAM_REF}"; \
     git -C "${ADDITIVEFOAM_DIR}" checkout --detach FETCH_HEAD; \
     git -C "${ADDITIVEFOAM_DIR}" fetch --tags origin; \
-    additivefoam_revision="$(git -C "${ADDITIVEFOAM_DIR}" rev-parse HEAD)"; \
-    additivefoam_version="$(git -C "${ADDITIVEFOAM_DIR}" describe --tags --abbrev=0)"; \
-    for candidate in /opt/openfoam14/etc/bashrc /usr/lib/openfoam/openfoam14/etc/bashrc /opt/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam*/etc/bashrc; do \
-      if [ -f "$candidate" ]; then \
-        set +u; \
-        . "$candidate" || true; \
-        set -u; \
-        break; \
-      fi; \
-    done; \
-    cd "${ADDITIVEFOAM_DIR}"; \
-    ./Allwmake; \
-    rm -rf "${ADDITIVEFOAM_DIR}/.git"; \
     if ! getent group "${MDF_USER}" >/dev/null; then \
       if getent group "${MDF_GID}" >/dev/null; then \
         groupadd "${MDF_USER}"; \
@@ -59,7 +46,38 @@ RUN set -eux; \
       exit 1; \
     fi; \
     mkdir -p "${home_dir}" "${MDF_WORKDIR}"; \
-    chown -R "${MDF_USER}:${MDF_USER}" "${ADDITIVEFOAM_DIR}" "${home_dir}" "${MDF_WORKDIR}"; \
+    chown -R "${MDF_USER}:${MDF_USER}" "${ADDITIVEFOAM_DIR}" "${home_dir}" "${MDF_WORKDIR}"
+
+USER mdf
+
+RUN set -eux; \
+    for candidate in /opt/openfoam14/etc/bashrc /usr/lib/openfoam/openfoam14/etc/bashrc /opt/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam10/etc/bashrc /usr/lib/openfoam/openfoam*/etc/bashrc; do \
+      if [ -f "$candidate" ]; then \
+        set +u; \
+        . "$candidate" || true; \
+        set -u; \
+        break; \
+      fi; \
+    done; \
+    cd "${ADDITIVEFOAM_DIR}"; \
+    ./Allwmake
+
+USER root
+
+RUN set -eux; \
+    additivefoam_revision="$(git -c safe.directory="${ADDITIVEFOAM_DIR}" -C "${ADDITIVEFOAM_DIR}" rev-parse HEAD)"; \
+    additivefoam_version="$(git -c safe.directory="${ADDITIVEFOAM_DIR}" -C "${ADDITIVEFOAM_DIR}" describe --tags --abbrev=0)"; \
+    rm -rf "${ADDITIVEFOAM_DIR}/.git"; \
+    { \
+      echo '#!/bin/bash'; \
+      echo 'set -e'; \
+      echo '. /openfoam/profile.rc'; \
+      echo 'if [ -f "${ADDITIVEFOAM_DIR}/etc/bashrc" ]; then'; \
+      echo '  . "${ADDITIVEFOAM_DIR}/etc/bashrc"'; \
+      echo 'fi'; \
+      echo 'exec "$@"'; \
+    } > /entrypoint.sh; \
+    chmod a+x /entrypoint.sh; \
     mkdir -p /usr/share/ornl-mdf/inventory/additivefoam; \
     { \
       echo "image=additivefoam"; \
@@ -72,5 +90,6 @@ RUN set -eux; \
     } > /usr/share/ornl-mdf/inventory/additivefoam/metadata.env; \
     dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort > /usr/share/ornl-mdf/inventory/additivefoam/apt.tsv
 
+ENTRYPOINT ["/entrypoint.sh"]
 USER mdf
 WORKDIR /workspace

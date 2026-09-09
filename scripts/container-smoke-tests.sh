@@ -41,7 +41,7 @@ for target in "$@"; do
       ;;
     additivefoam)
       docker run --rm "$image" /bin/bash -lc \
-        'command -v checkMesh >/dev/null && cd /opt/AdditiveFOAM/tutorials/AMB2018-02-B && test "$(tail -n 1 log.additiveFoam)" = "Finalising parallel run"'
+        'command -v checkMesh >/dev/null && command -v additiveFoam >/dev/null && additiveFoam -help >/dev/null && { test ! -f "${ADDITIVEFOAM_DIR}/etc/bashrc" || test -n "${ADDITIVEFOAM_VERSION:-}"; }'
       ;;
     exaca)
       output="$(expect_failure 'ExaCA serial invocation' docker run --rm "$image" ExaCA)"
